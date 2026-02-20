@@ -5,7 +5,7 @@ The official Go SDK for connecting to the Threadify Engine.
 ## Installation
 
 ```bash
-go get https://github.com/ThreadifyDev/go-sdk.git
+go get github.com/ThreadifyDev/go-sdk
 ```
 
 ## Quick Start
@@ -20,7 +20,7 @@ package main
 import (
 	"context"
 	"log"
-	"https://github.com/ThreadifyDev/go-sdk.git"
+	"github.com/ThreadifyDev/go-sdk"
 )
 
 func main() {
