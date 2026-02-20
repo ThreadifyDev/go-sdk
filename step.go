@@ -2,6 +2,7 @@ package threadify
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -232,17 +233,21 @@ func (s *ThreadStep) generateIdempotencyKey() string {
 	}
 	sort.Strings(keys)
 
+	// Use json.Marshal for each key and value so that special characters
+	// (quotes, backslashes, control chars, etc.) are escaped exactly the
+	// same way JavaScript's JSON.stringify escapes them. Without this, the
+	// two SDKs produce different byte sequences and therefore different hashes.
 	var sb strings.Builder
 	sb.WriteString("{")
 	for i, k := range keys {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		sb.WriteString(`"`)
-		sb.WriteString(k)
-		sb.WriteString(`":"`)
-		sb.WriteString(s.context[k])
-		sb.WriteString(`"`)
+		keyBytes, _ := json.Marshal(k)
+		valBytes, _ := json.Marshal(s.context[k])
+		sb.Write(keyBytes)
+		sb.WriteString(":")
+		sb.Write(valBytes)
 	}
 	sb.WriteString("}")
 
