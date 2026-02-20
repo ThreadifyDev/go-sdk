@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/creativeJoe007/ThreadifyEngine/threadify-sdk-go"
+	"https://github.com/ThreadifyDev/go-sdk.git"
 )
 
 func main() {
