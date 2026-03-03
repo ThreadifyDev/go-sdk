@@ -203,34 +203,28 @@ func (t *ThreadInstance) LinkThread(ctx context.Context, threadID, relationship 
 	return t.AddRefs(ctx, map[string]string{refKey: threadID})
 }
 
-func (t *ThreadInstance) End(ctx context.Context, status string, reason ...string) (*ThreadEndResponse, error) {
+// Cancel marks the thread as cancelled (for non-contract threads)
+func (t *ThreadInstance) Cancel(ctx context.Context, reason ...string) (*ThreadEndResponse, error) {
 	if t == nil {
 		return nil, fmt.Errorf("ThreadInstance is nil")
-	}
-	if status == "" {
-		status = StatusCancelled
 	}
 	reasonStr := ""
 	if len(reason) > 0 {
 		reasonStr = reason[0]
 	}
-	return t.endThread(ctx, status, reasonStr)
+	return t.endThread(ctx, StatusCancelled, reasonStr)
 }
 
-func (t *ThreadInstance) Close(ctx context.Context, reason ...string) (*ThreadEndResponse, error) {
-	r := ""
-	if len(reason) > 0 {
-		r = reason[0]
-	}
-	return t.End(ctx, StatusCancelled, r)
-}
-
+// Complete marks the thread as completed (for non-contract threads)
 func (t *ThreadInstance) Complete(ctx context.Context, reason ...string) (*ThreadEndResponse, error) {
-	r := ""
-	if len(reason) > 0 {
-		r = reason[0]
+	if t == nil {
+		return nil, fmt.Errorf("ThreadInstance is nil")
 	}
-	return t.End(ctx, StatusCompleted, r)
+	reasonStr := ""
+	if len(reason) > 0 {
+		reasonStr = reason[0]
+	}
+	return t.endThread(ctx, StatusCompleted, reasonStr)
 }
 
 func (t *ThreadInstance) endThread(ctx context.Context, status, reason string) (*ThreadEndResponse, error) {
