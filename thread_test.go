@@ -50,12 +50,12 @@ func TestThreadInstance_End_Statuses(t *testing.T) {
 		wantStat string
 	}{
 		{
-			"End",
+			"Cancel",
 			func(ctx context.Context, tr *ThreadInstance) error {
-				_, err := tr.End(ctx, StatusCompleted, "done")
+				_, err := tr.Cancel(ctx, "done")
 				return err
 			},
-			StatusCompleted,
+			StatusCancelled,
 		},
 		{
 			"Complete",
@@ -64,14 +64,6 @@ func TestThreadInstance_End_Statuses(t *testing.T) {
 				return err
 			},
 			StatusCompleted,
-		},
-		{
-			"Close",
-			func(ctx context.Context, tr *ThreadInstance) error {
-				_, err := tr.Close(ctx, "aborted")
-				return err
-			},
-			StatusCancelled,
 		},
 	}
 

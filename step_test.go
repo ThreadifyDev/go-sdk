@@ -606,7 +606,7 @@ func TestThreadInstance_LinkThread_InvalidUUID(t *testing.T) {
 	}
 }
 
-func TestThreadInstance_End(t *testing.T) {
+func TestThreadInstance_Cancel(t *testing.T) {
 	conn, mt := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
 
@@ -627,9 +627,9 @@ func TestThreadInstance_End(t *testing.T) {
 		"message":      "Thread cancelled",
 	})
 
-	resp, err := thread.End(ctx, "cancelled", "User requested cancellation")
+	resp, err := thread.Cancel(ctx, "User requested cancellation")
 	if err != nil {
-		t.Fatalf("End() error: %v", err)
+		t.Fatalf("Cancel() error: %v", err)
 	}
 
 	if resp.Status != "cancelled" {

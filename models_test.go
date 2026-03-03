@@ -115,11 +115,11 @@ func TestConnectOptions_withDefaults(t *testing.T) {
 	opts := ConnectOptions{}
 	opts = opts.withDefaults()
 
-	if opts.WSURL != "" {
-		t.Errorf("expected empty WSURL by default, got %q", opts.WSURL)
+	if opts.WSURL != "wss://eng.threadify.dev/threads" {
+		t.Errorf("expected default WSURL to be wss://eng.threadify.dev/threads, got %q", opts.WSURL)
 	}
-	if opts.GraphQLURL != "" {
-		t.Errorf("expected empty GraphQLURL by default, got %q", opts.GraphQLURL)
+	if opts.GraphQLURL != "https://eng.threadify.dev/graphql" {
+		t.Errorf("expected default GraphQLURL to be derived from default WSURL, got %q", opts.GraphQLURL)
 	}
 }
 

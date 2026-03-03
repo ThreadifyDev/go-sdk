@@ -123,6 +123,9 @@ type ConnectOptions struct {
 func (o *ConnectOptions) withDefaults() ConnectOptions {
 	out := *o
 
+	if out.WSURL == "" {
+		out.WSURL = "wss://eng.threadify.dev/threads"
+	}
 	if out.GraphQLURL == "" {
 		out.GraphQLURL = deriveGraphQLURL(out.WSURL)
 	}

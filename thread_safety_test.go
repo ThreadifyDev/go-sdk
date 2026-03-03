@@ -50,10 +50,10 @@ func TestThreadInstance_NilSafety(t *testing.T) {
 		}
 	})
 
-	t.Run("End on nil thread", func(t *testing.T) {
-		_, err := thread.End(ctx, StatusCompleted)
+	t.Run("Cancel on nil thread", func(t *testing.T) {
+		_, err := thread.Cancel(ctx)
 		if err == nil {
-			t.Error("expected error when calling End on nil thread, got nil")
+			t.Error("expected error when calling Cancel on nil thread, got nil")
 		}
 	})
 }
