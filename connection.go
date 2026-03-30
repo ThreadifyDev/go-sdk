@@ -301,6 +301,11 @@ func (c *Connection) Subscribe(ctx context.Context, event, stepName string, hand
 		return fmt.Errorf("handler cannot be nil")
 	}
 
+	// Auto-convert empty step name to "global" for thread-level subscriptions
+	if stepName == "" {
+		stepName = "global"
+	}
+
 	source, eventType := parseEvent(event)
 	eventTypes := buildEventTypes(source, eventType)
 	if err := c.sendSubscription(stepName, eventTypes); err != nil {
