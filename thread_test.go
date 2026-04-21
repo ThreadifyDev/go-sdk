@@ -24,8 +24,8 @@ func TestThreadInstance_WaitFor_SuccessNotification(t *testing.T) {
 			ThreadID:         "thread-wait-123",
 			StepName:         "order_placed",
 			StepStatus:       StatusSuccess,
-			Source:           "execution",
-			NotificationType: "execution.success",
+			Source:           "step",
+			NotificationType: "step.success",
 		}
 		thread.handleNotification(notif)
 	}()

@@ -569,13 +569,13 @@ func parseEvent(event string) (source, eventType string) {
 
 func buildEventTypes(source, eventType string) []string {
 	if source == "*" && eventType == "*" {
-		return []string{"execution.success", "execution.failed", "validation.passed", "validation.violated"}
+		return []string{"step.success", "step.failed", "rule.passed", "rule.violated"}
 	}
-	if source == "execution" && eventType == "*" {
-		return []string{"execution.success", "execution.failed"}
+	if source == "step" && eventType == "*" {
+		return []string{"step.success", "step.failed"}
 	}
-	if source == "validation" && eventType == "*" {
-		return []string{"validation.passed", "validation.violated"}
+	if source == "rule" && eventType == "*" {
+		return []string{"rule.passed", "rule.violated"}
 	}
 	return []string{source + "." + eventType}
 }

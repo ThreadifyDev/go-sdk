@@ -28,8 +28,8 @@ func TestNotification_NewNotification(t *testing.T) {
 		"timestamp":        "2026-02-18T12:00:00Z",
 		"violationType":    "required_field",
 		"ownerId":          "owner-789",
-		"source":           "validation",
-		"notificationType": "validation.violated",
+		"source":           "rule",
+		"notificationType": "rule.violated",
 	}
 
 	notif := NewNotification(data, conn, "ack-token-1")
@@ -49,8 +49,8 @@ func TestNotification_NewNotification(t *testing.T) {
 	if notif.Severity != "critical" {
 		t.Errorf("expected severity 'critical', got %q", notif.Severity)
 	}
-	if notif.Source != "validation" {
-		t.Errorf("expected source 'validation', got %q", notif.Source)
+	if notif.Source != "rule" {
+		t.Errorf("expected source 'rule', got %q", notif.Source)
 	}
 }
 

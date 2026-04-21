@@ -287,11 +287,11 @@ func TestBuildEventTypes(t *testing.T) {
 		eType    string
 		expected []string
 	}{
-		{"*", "*", []string{"execution.success", "execution.failed", "validation.passed", "validation.violated"}},
-		{"execution", "*", []string{"execution.success", "execution.failed"}},
-		{"validation", "*", []string{"validation.passed", "validation.violated"}},
-		{"execution", "success", []string{"execution.success"}},
-		{"validation", "violated", []string{"validation.violated"}},
+		{"*", "*", []string{"step.success", "step.failed", "rule.passed", "rule.violated"}},
+		{"step", "*", []string{"step.success", "step.failed"}},
+		{"rule", "*", []string{"rule.passed", "rule.violated"}},
+		{"step", "success", []string{"step.success"}},
+		{"rule", "violated", []string{"rule.violated"}},
 	}
 
 	for _, tt := range tests {
@@ -415,8 +415,8 @@ func TestConnection_HandleNotification_Deduplication(t *testing.T) {
 		"notificationId":   "notif-001",
 		"threadId":         "thread-123",
 		"stepName":         "order_placed",
-		"source":           "execution",
-		"notificationType": "execution.success",
+		"source":           "step",
+		"notificationType": "step.success",
 		"status":           "passed",
 		"stepStatus":       "success",
 		"severity":         "info",
