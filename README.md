@@ -28,7 +28,7 @@ func main() {
 	conn, _ := threadify.Connect(ctx, "your-api-key")
 	defer conn.Close()
 
-	thread, err := conn.Start(ctx, threadify.WithContract("order_flow"))
+	thread, err := conn.Start(ctx, "", "order_flow")
 
     if err != nil {
         log.Fatal(err)
@@ -51,16 +51,14 @@ Start a thread, optionally associating it with a contract.
 
 ```go
 // Start a generic thread
-thread, err := conn.Start(ctx)
+thread, err := conn.Start(ctx, "", "")
 
 if err != nil {
     log.Fatal(err)
 }
 
 // Start a thread for a specific contract
-thread, err := conn.Start(ctx, 
-    threadify.WithContract("order_processing"),
-)
+thread, err := conn.Start(ctx, "Order Processing Label", "order_processing")
 
 if err != nil {
     log.Fatal(err)

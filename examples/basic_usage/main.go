@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"https://github.com/ThreadifyDev/go-sdk.git"
+	threadify "github.com/ThreadifyDev/go-sdk"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	fmt.Println("Connected to Threadify!")
 
 	// 2. Start a new thread
-	thread, err := conn.Start(ctx, threadify.WithContract("order_processing"))
+	thread, err := conn.Start(ctx, "", "order_processing")
 	if err != nil {
 		log.Fatalf("Failed to start thread: %v", err)
 	}

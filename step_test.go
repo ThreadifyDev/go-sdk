@@ -20,7 +20,7 @@ func TestThreadStep_FluentChaining(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestThreadStep_ManualIdempotencyKey(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestThreadStep_AutoIdempotencyKey(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestThreadStep_Success(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestThreadStep_Failed(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestThreadStep_Error(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestThreadStep_DuplicateDetection(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestThreadStep_EmptyStepName(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestThreadStep_SubStepStatuses(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestThreadStep_SubStepInvalidStatus(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 	step := thread.Step("process")
 
 	// Should not panic, but store error.
@@ -382,7 +382,7 @@ func TestThreadStep_IdempotencyKeyErrorOnEmpty(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 	step := thread.Step("test")
 
 	// Should not panic, but store error.
@@ -408,7 +408,7 @@ func TestThreadStep_PrivateContext(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 	step := thread.Step("payment")
 
 	step.AddPrivateContext(map[string]any{"cardNumber": "4111111111111111"})
@@ -433,7 +433,7 @@ func TestThreadStep_MessageAsMapData(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 	step := thread.Step("order_placed")
 
 	mt.enqueueResponse(map[string]any{
@@ -465,7 +465,7 @@ func TestThreadInstance_InviteParty(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	mt.enqueueResponse(map[string]any{
 		"action":      "inviteParty",
@@ -500,7 +500,7 @@ func TestThreadInstance_InviteParty_MissingRole(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	_, err := thread.InviteParty(ctx, InviteOptions{})
 	if err == nil {
@@ -519,7 +519,7 @@ func TestThreadInstance_AddRefs(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	mt.enqueueResponse(map[string]any{
 		"action": "addRefs",
@@ -550,7 +550,7 @@ func TestThreadInstance_AddRefs_Empty(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	err := thread.AddRefs(ctx, map[string]string{})
 	if err == nil {
@@ -569,7 +569,7 @@ func TestThreadInstance_LinkThread(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	mt.enqueueResponse(map[string]any{
 		"action": "addRefs",
@@ -598,7 +598,7 @@ func TestThreadInstance_LinkThread_InvalidUUID(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	err := thread.LinkThread(ctx, "not-a-uuid", "parent")
 	if err == nil {
@@ -617,7 +617,7 @@ func TestThreadInstance_Cancel(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	mt.enqueueResponse(map[string]any{
 		"action":       "threadEnd",
@@ -651,7 +651,7 @@ func TestThreadInstance_Complete(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	mt.enqueueResponse(map[string]any{
 		"action":       "threadEnd",
@@ -682,7 +682,7 @@ func TestThreadInstance_WaitFor_Timeout(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	_, err := thread.WaitFor(ctx, "some_step", &WaitOptions{
 		Timeout: 100 * time.Millisecond,
@@ -703,7 +703,7 @@ func TestThreadInstance_WaitFor_EmptyStepName(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, _ := conn.Start(ctx)
+	thread, _ := conn.Start(ctx, "", "")
 
 	_, err := thread.WaitFor(ctx, "", nil)
 	if err == nil {

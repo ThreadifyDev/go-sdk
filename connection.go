@@ -135,21 +135,33 @@ func (c *Connection) IsConnected() bool {
 	return c.isConnected
 }
 
-func (c *Connection) Start(ctx context.Context, opts ...StartOption) (*ThreadInstance, error) {
+func (c *Connection) Start(ctx context.Context, label string, contractName string, opts ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected. Call Connect() first")
 	}
 
-	cfg := startConfig{}
+	cfg := startConfig{
+		contractName: contractName,
+	}
 	for _, o := range opts {
 		o(&cfg)
 	}
 
+	refs := make(map[string]any)
+	if cfg.refs != nil {
+		for k, v := range cfg.refs {
+			refs[k] = v
+		}
+	}
+
+	refs[FieldService] = firstNonEmpty(cfg.serviceName, c.serviceName)
+	if label != "" {
+		refs["label"] = label
+	}
+
 	msg := map[string]any{
 		FieldAction: ActionStartThread,
-		FieldRefs: map[string]any{
-			FieldService: firstNonEmpty(cfg.serviceName, c.serviceName),
-		},
+		FieldRefs:   refs,
 	}
 
 	if cfg.contractName != "" {
@@ -191,6 +203,7 @@ type startConfig struct {
 	contractName string
 	serviceName  string
 	role         string
+	refs         map[string]any
 }
 
 type StartOption func(*startConfig)
@@ -202,8 +215,13 @@ func WithContract(name string) StartOption {
 func WithService(name string) StartOption {
 	return func(c *startConfig) { c.serviceName = name }
 }
+
 func WithRole(role string) StartOption {
 	return func(c *startConfig) { c.role = role }
+}
+
+func WithRefs(refs map[string]any) StartOption {
+	return func(c *startConfig) { c.refs = refs }
 }
 
 type JoinOption func(*joinConfig)

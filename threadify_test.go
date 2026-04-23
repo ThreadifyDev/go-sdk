@@ -118,7 +118,7 @@ func TestConnection_Start_NonContract(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx)
+	thread, err := conn.Start(ctx, "", "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestConnection_Start_WithContract(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx, WithContract("order_flow"), WithService("merchant-service"))
+	thread, err := conn.Start(ctx, "", "order_flow", WithService("merchant-service"))
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestConnection_Start_NotConnected(t *testing.T) {
 	_ = conn.Close()
 
 	ctx := context.Background()
-	_, err := conn.Start(ctx)
+	_, err := conn.Start(ctx, "", "")
 	if err == nil {
 		t.Error("expected error when not connected")
 	}
