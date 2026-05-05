@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	threadify "github.com/ThreadifyDev/go-sdk"
+	threadifyotel "github.com/ThreadifyDev/go-sdk/otel"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	exporter := threadify.NewSpanExporter(conn, threadify.SpanExporterOptions{
+	exporter := threadifyotel.NewSpanExporter(conn, threadifyotel.SpanExporterOptions{
 		Refs: []string{"rider.id"},
 	})
 
