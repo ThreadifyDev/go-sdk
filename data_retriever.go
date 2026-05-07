@@ -224,7 +224,10 @@ func (d *DataRetriever) GetThreadsByRef(ctx context.Context, q *RefQuery) ([]*Ar
 				limit: $limit
 				offset: $offset
 			) {
-				%s
+				threads {
+					%s
+				}
+				totalCount
 			}
 		}
 	`, threadFields)
@@ -258,7 +261,12 @@ func (d *DataRetriever) GetThreadsByRef(ctx context.Context, q *RefQuery) ([]*Ar
 		return nil, err
 	}
 
-	threadsList := asSlice(data["threadsByRef"])
+	connection := asMap(data["threadsByRef"])
+	if connection == nil {
+		return nil, nil
+	}
+
+	threadsList := asSlice(connection["threads"])
 	if threadsList == nil {
 		return nil, nil
 	}

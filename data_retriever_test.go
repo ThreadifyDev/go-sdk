@@ -166,17 +166,20 @@ func TestDataRetriever_GetThreadsByRef(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		response := map[string]any{
 			"data": map[string]any{
-				"threadsByRef": []any{
-					map[string]any{
-						"id":           "thread-ref-001",
-						"contractName": "order_flow",
-						"status":       "completed",
+				"threadsByRef": map[string]any{
+					"threads": []any{
+						map[string]any{
+							"id":           "thread-ref-001",
+							"contractName": "order_flow",
+							"status":       "completed",
+						},
+						map[string]any{
+							"id":           "thread-ref-002",
+							"contractName": "order_flow",
+							"status":       "in_progress",
+						},
 					},
-					map[string]any{
-						"id":           "thread-ref-002",
-						"contractName": "order_flow",
-						"status":       "in_progress",
-					},
+					"totalCount": 2,
 				},
 			},
 		}
@@ -208,7 +211,10 @@ func TestDataRetriever_GetThreadsByRef_Empty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		response := map[string]any{
 			"data": map[string]any{
-				"threadsByRef": nil,
+				"threadsByRef": map[string]any{
+					"threads":    nil,
+					"totalCount": 0,
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
