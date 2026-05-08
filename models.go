@@ -34,6 +34,14 @@ const (
 	SeverityCritical ValidationSeverity = "critical"
 )
 
+type AccessLevel string
+
+const (
+	ForExternal    AccessLevel = "external"
+	ForObserver    AccessLevel = "observer"
+	ForParticipant AccessLevel = "participant"
+)
+
 const (
 	ActionConnect           = "connect"
 	ActionStartThread       = "startThread"
@@ -186,7 +194,7 @@ type SubStepData struct {
 
 type InviteOptions struct {
 	Role        string
-	AccessLevel string
+	AccessLevel AccessLevel
 	ExpiresIn   string
 }
 

@@ -193,7 +193,7 @@ func (c *Connection) Start(ctx context.Context, label string, contractName strin
 	}
 
 	threadID := asString(resp[FieldThreadID])
-	thread := newThreadInstance(c, threadID, cfg.contractName, "", nil)
+	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), nil)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
 	return thread, nil
@@ -296,7 +296,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 
 	threadID := asString(resp[FieldThreadID])
 	threadRole := asString(resp[FieldRole])
-	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, nil)
+	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), nil)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Joined thread", "threadID", threadID, "role", threadRole)
 	return thread, nil

@@ -10,11 +10,12 @@ import (
 )
 
 type ThreadInstance struct {
-	conn       *Connection
-	ThreadID   string
-	ContractID string
-	Role       string
-	Refs       map[string]string
+	conn        *Connection
+	ThreadID    string
+	ContractID  string
+	Role        string
+	AccessLevel string
+	Refs        map[string]string
 
 	steps        sync.Map
 	pendingWaits sync.Map
@@ -26,13 +27,14 @@ type pendingWait struct {
 	statuses []string
 }
 
-func newThreadInstance(conn *Connection, threadID, contractID, role string, refs map[string]string) *ThreadInstance {
+func newThreadInstance(conn *Connection, threadID, contractID, role, accessLevel string, refs map[string]string) *ThreadInstance {
 	return &ThreadInstance{
-		conn:       conn,
-		ThreadID:   threadID,
-		ContractID: contractID,
-		Role:       role,
-		Refs:       refs,
+		conn:        conn,
+		ThreadID:    threadID,
+		ContractID:  contractID,
+		Role:        role,
+		AccessLevel: accessLevel,
+		Refs:        refs,
 	}
 }
 
@@ -60,7 +62,7 @@ func (t *ThreadInstance) InviteParty(ctx context.Context, opts InviteOptions) (*
 
 	accessLevel := opts.AccessLevel
 	if accessLevel == "" {
-		accessLevel = "external"
+		accessLevel = ForExternal
 	}
 	expiresIn := opts.ExpiresIn
 	if expiresIn == "" {
