@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,13 +23,17 @@ type SpanExporter struct {
 }
 
 type SpanExporterOptions struct {
-	Refs []string
+	Refs    []string
+	Filters []string
 }
 
 // NewSpanExporter creates a new OpenTelemetry exporter for Threadify.
 func NewSpanExporter(conn *threadify.Connection, opts SpanExporterOptions) *SpanExporter {
 	if opts.Refs == nil {
 		opts.Refs = []string{}
+	}
+	if opts.Filters == nil {
+		opts.Filters = []string{}
 	}
 	return &SpanExporter{
 		conn:           conn,
@@ -44,6 +49,9 @@ func (e *SpanExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnl
 	}
 
 	for _, span := range spans {
+		if e.shouldDrop(span.Name()) {
+			continue
+		}
 		if err := e.processSpan(ctx, span); err != nil {
 			return err
 		}
@@ -210,12 +218,12 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 		label = span.Name()
 	}
 	serviceName := attrString(span.Attributes(), "threadify.service")
-	
+
 	opts := []threadify.StartOption{}
 	if serviceName != "" {
 		opts = append(opts, threadify.WithService(serviceName))
 	}
-	
+
 	thread, err = e.conn.Start(ctx, label, contractName, opts...)
 	if err != nil {
 		return nil, err
@@ -288,6 +296,25 @@ func attrValueToString(v attribute.Value) string {
 
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func (e *SpanExporter) shouldDrop(name string) bool {
+	for _, filter := range e.options.Filters {
+		if filter == "" {
+			continue
+		}
+		if strings.HasSuffix(filter, "*") {
+			prefix := filter[:len(filter)-1]
+			if strings.HasPrefix(name, prefix) {
+				return true
+			}
+			continue
+		}
+		if name == filter {
+			return true
+		}
+	}
+	return false
 }
 
 var _ sdktrace.SpanExporter = (*SpanExporter)(nil)

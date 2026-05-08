@@ -175,6 +175,44 @@ The current version of the SDK is available via the `threadify.Version` constant
 fmt.Println("Threadify Go SDK Version:", threadify.Version)
 ```
 
+## OpenTelemetry Integration
+
+Because Go is statically typed, the OpenTelemetry integration requires its own sub-module to avoid bloating the core SDK for users who do not use OpenTelemetry.
+
+**Install:**
+
+```bash
+go get github.com/ThreadifyDev/go-sdk/otel
+```
+
+**Usage:**
+
+```go
+import (
+    "go.opentelemetry.io/otel"
+    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+    threadify "github.com/ThreadifyDev/go-sdk"
+    threadifyotel "github.com/ThreadifyDev/go-sdk/otel"
+)
+
+conn, _ := threadify.Connect(ctx, "api-key")
+
+exporter := threadifyotel.NewSpanExporter(conn, threadifyotel.SpanExporterOptions{
+    Refs:    []string{"rider.id"},
+    Filters: []string{"invoke_llm", "adk.before*", "llm.*"},
+})
+
+provider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
+otel.SetTracerProvider(provider)
+```
+
+**Filter patterns:**
+
+- `"invoke_llm"` — exact match
+- `"adk.before*"` — prefix wildcard, drops any span starting with `adk.before`
+- `"llm.*"` — prefix wildcard, drops any span starting with `llm.`
+
 ## Testing
 
 To run the SDK tests, execute:

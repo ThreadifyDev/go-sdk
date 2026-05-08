@@ -27,7 +27,8 @@ func main() {
 	defer conn.Close()
 
 	exporter := threadifyotel.NewSpanExporter(conn, threadifyotel.SpanExporterOptions{
-		Refs: []string{"rider.id"},
+		Refs:    []string{"rider.id"},
+		Filters: []string{"invoke_llm", "adk.before*", "llm.*"},
 	})
 
 	provider := sdktrace.NewTracerProvider(
