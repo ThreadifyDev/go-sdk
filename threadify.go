@@ -151,11 +151,21 @@ type Factory struct {
 }
 
 func (f *Factory) Connect(ctx context.Context) (*Connection, error) {
+	return Connect(ctx, f.config.APIKey, f.connectOptions()...)
+}
+
+func (f *Factory) connectOptions() []Option {
 	opts := []Option{
-		WithServiceName(f.config.ServiceName),
-		WithWSURL(f.config.WSURL),
-		WithGraphQLURL(f.config.GraphQLURL),
 		WithDebug(f.config.Debug),
 	}
-	return Connect(ctx, f.config.APIKey, opts...)
+	if f.config.ServiceName != "" {
+		opts = append(opts, WithServiceName(f.config.ServiceName))
+	}
+	if f.config.WSURL != "" {
+		opts = append(opts, WithWSURL(f.config.WSURL))
+	}
+	if f.config.GraphQLURL != "" {
+		opts = append(opts, WithGraphQLURL(f.config.GraphQLURL))
+	}
+	return opts
 }

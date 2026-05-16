@@ -118,6 +118,12 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		return nil, s.err
 	}
 
+	if len(s.refs) > 0 {
+		if err := s.thread.AddRefs(ctx, s.refs); err != nil {
+			return nil, fmt.Errorf("add step refs: %w", err)
+		}
+	}
+
 	s.event[FieldFinishedAt] = nowISO()
 	s.event[FieldStatus] = status
 	s.event[FieldContext] = s.context
@@ -134,10 +140,10 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		subStepMaps := make([]map[string]any, len(s.subSteps))
 		for i, ss := range s.subSteps {
 			subStepMaps[i] = map[string]any{
-				"name":       ss.Name,
-				"status":     ss.Status,
-				"payload":    ss.Payload,
-				"recordedAt": ss.RecordedAt,
+				FieldName:       ss.Name,
+				FieldStatus:     ss.Status,
+				FieldPayload:    ss.Payload,
+				FieldRecordedAt: ss.RecordedAt,
 			}
 		}
 		s.event[FieldSubSteps] = subStepMaps

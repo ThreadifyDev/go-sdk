@@ -14,6 +14,7 @@ const (
 	minMaxInFlight          = 1
 	maxMaxInFlight          = 100
 	defaultProcessedMaxSize = 10_000
+	defaultWebSocketURL     = "wss://eng.threadify.dev/threads"
 )
 
 type StepStatus string
@@ -107,6 +108,9 @@ const (
 	FieldCompletedAt       = "completedAt"
 	FieldCancelledAt       = "cancelledAt"
 	FieldThreadStatus      = "threadStatus"
+	FieldName              = "name"
+	FieldPayload           = "payload"
+	FieldRecordedAt        = "recordedAt"
 
 	StatusSuccess    = "success"
 	StatusFailed     = "failed"
@@ -133,7 +137,7 @@ func (o *ConnectOptions) withDefaults() ConnectOptions {
 	out := *o
 
 	if out.WSURL == "" {
-		out.WSURL = "wss://eng.threadify.dev/threads"
+		out.WSURL = defaultWebSocketURL
 	}
 	if out.GraphQLURL == "" {
 		out.GraphQLURL = deriveGraphQLURL(out.WSURL)

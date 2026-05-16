@@ -1,7 +1,7 @@
-.PHONY: all test lint fmt clean build
+.PHONY: all test lint fmt clean build bump-version
 
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS := -X 'github.com/threadify/threadify-sdk-go.Commit=$(COMMIT)'
+LDFLAGS := -X 'github.com/ThreadifyDev/go-sdk.Commit=$(COMMIT)'
 
 all: lint test
 
@@ -25,3 +25,9 @@ fmt:
 clean:
 	go clean
 	rm -f bin/*
+
+bump-version:
+	@test -n "$(VERSION)" || (echo "usage: make bump-version VERSION=0.2.1" && exit 1)
+	@printf '%s\n' "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || (echo "VERSION must be semver without a leading v, e.g. 0.2.1" && exit 1)
+	@printf '%s\n' "$(VERSION)" > VERSION
+	@echo "Updated VERSION to $(VERSION)"

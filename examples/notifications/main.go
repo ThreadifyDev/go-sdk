@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"https://github.com/ThreadifyDev/go-sdk.git"
+	threadify "github.com/ThreadifyDev/go-sdk"
 )
 
 func main() {
@@ -16,7 +16,8 @@ func main() {
 		apiKey = "your-api-key"
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// 1. Connect
 	conn, err := threadify.Connect(ctx, apiKey)
@@ -35,7 +36,10 @@ func main() {
 		return
 	}
 
-	thread, err := conn.Join(ctx, threadify.WithJoinThreadID(threadID))
+	thread, err := conn.Join(ctx,
+		threadify.WithJoinThreadID(threadID),
+		threadify.WithJoinRole("observer"),
+	)
 	if err != nil {
 		log.Fatalf("Failed to join thread: %v", err)
 	}

@@ -106,6 +106,25 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+func TestFactoryConnectOptions_UsesDefaultWSURLWhenUnset(t *testing.T) {
+	factory := Create(Config{
+		APIKey:      "test-key",
+		ServiceName: "my-service",
+	})
+
+	opts := (&ConnectOptions{}).withDefaults()
+	for _, opt := range factory.connectOptions() {
+		opt(&opts)
+	}
+
+	if opts.WSURL != "wss://eng.threadify.dev/threads" {
+		t.Fatalf("expected default WSURL, got %q", opts.WSURL)
+	}
+	if opts.GraphQLURL != "https://eng.threadify.dev/graphql" {
+		t.Fatalf("expected default GraphQLURL, got %q", opts.GraphQLURL)
+	}
+}
+
 func TestConnection_Start_NonContract(t *testing.T) {
 	conn, mt := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
@@ -118,7 +137,7 @@ func TestConnection_Start_NonContract(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx, "", "")
+	thread, err := conn.Start(ctx, "")
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -139,7 +158,7 @@ func TestConnection_Start_WithContract(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	thread, err := conn.Start(ctx, "", "order_flow", WithService("merchant-service"))
+	thread, err := conn.Start(ctx, "", WithContract("order_flow"), WithService("merchant-service"))
 	if err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
@@ -161,12 +180,106 @@ func TestConnection_Start_WithContract(t *testing.T) {
 	}
 }
 
+func TestConnection_Start_WithOptionalContractOption(t *testing.T) {
+	conn, mt := newTestConnection(t)
+	defer func() { _ = conn.Close() }()
+
+	mt.enqueueResponse(map[string]any{
+		"action":   "startThread",
+		"status":   "success",
+		"threadId": "thread-457",
+	})
+
+	ctx := context.Background()
+	thread, err := conn.Start(ctx, "Order Processing Label", WithContract("order_flow"), WithService("merchant-service"))
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	if thread.ThreadID != "thread-457" {
+		t.Errorf("expected threadId 'thread-457', got %q", thread.ThreadID)
+	}
+
+	sent := mt.getSent()
+	startMsg := sent[len(sent)-1]
+	if startMsg["contractName"] != "order_flow" {
+		t.Errorf("expected contractName 'order_flow', got %v", startMsg["contractName"])
+	}
+	refs, ok := startMsg["refs"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected refs map on start message, got %T", startMsg["refs"])
+	}
+	if refs["label"] != "Order Processing Label" {
+		t.Errorf("expected label 'Order Processing Label', got %v", refs["label"])
+	}
+}
+
+func TestConnection_Start_PopulatesThreadRefs(t *testing.T) {
+	conn, mt := newTestConnection(t)
+	defer func() { _ = conn.Close() }()
+
+	mt.enqueueResponse(map[string]any{
+		"action":   "startThread",
+		"status":   "success",
+		"threadId": "thread-459",
+	})
+
+	ctx := context.Background()
+	thread, err := conn.Start(ctx, "Order Processing Label",
+		WithContract("order_flow"),
+		WithRefs(map[string]any{
+			"orderId": "ORD-123",
+			"attempt": 2,
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	if thread.Refs["orderId"] != "ORD-123" {
+		t.Errorf("expected orderId ref to be populated, got %q", thread.Refs["orderId"])
+	}
+	if thread.Refs["attempt"] != "2" {
+		t.Errorf("expected attempt ref to be stringified, got %q", thread.Refs["attempt"])
+	}
+}
+
+func TestConnection_Start_OptionsOnly(t *testing.T) {
+	conn, mt := newTestConnection(t)
+	defer func() { _ = conn.Close() }()
+
+	mt.enqueueResponse(map[string]any{
+		"action":   "startThread",
+		"status":   "success",
+		"threadId": "thread-458",
+	})
+
+	ctx := context.Background()
+	thread, err := conn.Start(ctx, "Standalone Thread", WithService("merchant-service"))
+	if err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	if thread.ThreadID != "thread-458" {
+		t.Errorf("expected threadId 'thread-458', got %q", thread.ThreadID)
+	}
+
+	sent := mt.getSent()
+	startMsg := sent[len(sent)-1]
+	if _, ok := startMsg["contractName"]; ok {
+		t.Errorf("did not expect contractName in start message, got %v", startMsg["contractName"])
+	}
+	if _, ok := startMsg["role"]; ok {
+		t.Errorf("did not expect role in start message without contract, got %v", startMsg["role"])
+	}
+}
+
 func TestConnection_Start_NotConnected(t *testing.T) {
 	conn, _ := newTestConnection(t)
 	_ = conn.Close()
 
 	ctx := context.Background()
-	_, err := conn.Start(ctx, "", "")
+	_, err := conn.Start(ctx, "")
 	if err == nil {
 		t.Error("expected error when not connected")
 	}
@@ -182,6 +295,9 @@ func TestConnection_Join_DirectJoin(t *testing.T) {
 		"threadId":   "thread-789",
 		"role":       "logistics",
 		"contractId": "contract-001",
+		"refs": map[string]any{
+			"orderId": "ORD-123",
+		},
 	})
 
 	ctx := context.Background()
@@ -195,6 +311,9 @@ func TestConnection_Join_DirectJoin(t *testing.T) {
 	}
 	if thread.Role != "logistics" {
 		t.Errorf("expected role 'logistics', got %q", thread.Role)
+	}
+	if thread.Refs["orderId"] != "ORD-123" {
+		t.Errorf("expected ref orderId 'ORD-123', got %q", thread.Refs["orderId"])
 	}
 }
 
