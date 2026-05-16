@@ -16,6 +16,7 @@ type ThreadInstance struct {
 	Role        string
 	AccessLevel string
 	Refs        map[string]string
+	Tags        []string // Tags applied at thread creation (immutable)
 
 	steps        sync.Map
 	pendingWaits sync.Map

@@ -177,6 +177,10 @@ func (c *Connection) Start(ctx context.Context, label string, contractName strin
 		}
 	}
 
+	if len(cfg.tags) > 0 {
+		msg[FieldTags] = cfg.tags
+	}
+
 	if err := c.send(msg); err != nil {
 		return nil, err
 	}
@@ -194,6 +198,7 @@ func (c *Connection) Start(ctx context.Context, label string, contractName strin
 
 	threadID := asString(resp[FieldThreadID])
 	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), nil)
+	thread.Tags = cfg.tags
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
 	return thread, nil
@@ -204,6 +209,7 @@ type startConfig struct {
 	serviceName  string
 	role         string
 	refs         map[string]any
+	tags         []string
 }
 
 type StartOption func(*startConfig)
@@ -222,6 +228,12 @@ func WithRole(role string) StartOption {
 
 func WithRefs(refs map[string]any) StartOption {
 	return func(c *startConfig) { c.refs = refs }
+}
+
+// WithTags sets immutable tags on the thread at creation time.
+// Tags cannot be changed or removed after the thread is started.
+func WithTags(tags ...string) StartOption {
+	return func(c *startConfig) { c.tags = tags }
 }
 
 type JoinOption func(*joinConfig)

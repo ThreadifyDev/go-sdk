@@ -98,6 +98,7 @@ const (
 	FieldIsDuplicate       = "isDuplicate"
 	FieldMetadata          = "threadify_metadata"
 	FieldReason            = "reason"
+	FieldTags              = "tags"
 	FieldContractID        = "contractId"
 	FieldAccessLevel       = "accessLevel"
 	FieldExpiresIn         = "expiresIn"
