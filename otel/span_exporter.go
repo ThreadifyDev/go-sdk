@@ -88,6 +88,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		"threadify.step_name": true,
 		"threadify.role":      true,
 		"threadify.service":   true,
+		"threadify.tags":      true,
 	}
 
 	for _, attr := range span.Attributes() {
@@ -223,6 +224,9 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 	if serviceName != "" {
 		opts = append(opts, threadify.WithService(serviceName))
 	}
+	if tags := attrStringSlice(span.Attributes(), "threadify.tags"); len(tags) > 0 {
+		opts = append(opts, threadify.WithTags(tags...))
+	}
 
 	thread, err = e.conn.Start(ctx, label, contractName, opts...)
 	if err != nil {
@@ -260,6 +264,23 @@ func attrString(attrs []attribute.KeyValue, key string) string {
 		}
 	}
 	return ""
+}
+
+func attrStringSlice(attrs []attribute.KeyValue, key string) []string {
+	for _, attr := range attrs {
+		if string(attr.Key) != key {
+			continue
+		}
+		switch attr.Value.Type() {
+		case attribute.STRINGSLICE:
+			return attr.Value.AsStringSlice()
+		case attribute.STRING:
+			if s := attr.Value.AsString(); s != "" {
+				return []string{s}
+			}
+		}
+	}
+	return nil
 }
 
 func attrValueToAny(v attribute.Value) any {
