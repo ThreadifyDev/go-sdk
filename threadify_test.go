@@ -242,14 +242,21 @@ func TestConnection_Join_EmptyTokenOrID(t *testing.T) {
 }
 
 func TestConnection_Join_InvalidParams(t *testing.T) {
-	conn, _ := newTestConnection(t)
+	conn, mt := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
 
+	// Since role is now optional, joining just by short ID should succeed
+	mt.enqueueResponse(map[string]any{
+		"action":   "joinThread",
+		"status":   "success",
+		"threadId": "short-id",
+		"role":     "participant", // mock backend auto-resolved role
+	})
+
 	ctx := context.Background()
-	// Short string without role — ambiguous.
 	_, err := conn.Join(ctx, WithJoinThreadID("short-id"))
-	if err == nil {
-		t.Error("expected error for short ID without role")
+	if err != nil {
+		t.Errorf("expected success for short ID without role, got: %v", err)
 	}
 }
 

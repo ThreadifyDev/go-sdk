@@ -281,14 +281,13 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 		msg[FieldThreadToken] = cfg.token
 		c.logger.Debug("Joining thread with token", "token_preview", cfg.token[:min(20, len(cfg.token))])
 	case cfg.threadID != "":
-		if cfg.role == "" {
-			return nil, fmt.Errorf("role is required when joining by thread ID")
-		}
 		msg[FieldThreadID] = cfg.threadID
-		msg[FieldRole] = cfg.role
+		if cfg.role != "" {
+			msg[FieldRole] = cfg.role
+		}
 		c.logger.Debug("Joining thread directly", "threadID", cfg.threadID, "role", cfg.role)
 	default:
-		return nil, fmt.Errorf("either WithJoinToken or WithJoinThreadID+WithJoinRole must be provided")
+		return nil, fmt.Errorf("either WithJoinToken or WithJoinThreadID must be provided")
 	}
 
 	if err := c.send(msg); err != nil {

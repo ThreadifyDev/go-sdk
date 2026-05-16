@@ -17,7 +17,7 @@ type ThreadStep struct {
 	manualIdempotencyKey string
 	subSteps             []SubStepData
 	event                map[string]any
-	context              map[string]any
+	context              map[string]string
 	metadata             map[string]any
 	err                  error
 }
@@ -27,7 +27,7 @@ func newThreadStep(stepName string, thread *ThreadInstance, serviceName string) 
 		stepName:    stepName,
 		thread:      thread,
 		serviceName: serviceName,
-		context:     make(map[string]any),
+		context:     make(map[string]string),
 		event: map[string]any{
 			FieldAction:     ActionRecordThreadEvent,
 			FieldThreadID:   thread.ThreadID,
@@ -57,7 +57,7 @@ func (s *ThreadStep) AddContext(data map[string]any) *ThreadStep {
 		return s
 	}
 	for k, v := range data {
-		s.context[k] = v
+		s.context[k] = fmt.Sprintf("%v", v)
 	}
 	return s
 }
@@ -67,8 +67,9 @@ func (s *ThreadStep) AddPrivateContext(data map[string]any) *ThreadStep {
 		return s
 	}
 	for k, v := range data {
-		s.context[k] = v
-		s.context["private_"+k] = v
+		str := fmt.Sprintf("%v", v)
+		s.context[k] = str
+		s.context["private_"+k] = str
 	}
 	return s
 }
@@ -260,8 +261,8 @@ func (s *ThreadStep) GetStatus() string {
 	return asString(s.event[FieldStatus])
 }
 
-func (s *ThreadStep) GetContext() map[string]any {
-	out := make(map[string]any, len(s.context))
+func (s *ThreadStep) GetContext() map[string]string {
+	out := make(map[string]string, len(s.context))
 	for k, v := range s.context {
 		out[k] = v
 	}
