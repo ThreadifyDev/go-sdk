@@ -486,10 +486,11 @@ func TestThreadInstance_InviteParty(t *testing.T) {
 	ctx := context.Background()
 	thread, _ := conn.Start(ctx, "")
 
+	//nolint:gosec // false positive in test
 	mt.enqueueResponse(map[string]any{
 		"action":      "inviteParty",
 		"status":      "success",
-		"threadToken": "jwt-token-here", //nolint:gosec // false positive in test
+		"threadToken": "jwt-token-here",
 		"role":        "supplier",
 		"accessLevel": "external",
 		"expiresAt":   "2026-03-01T00:00:00Z",
