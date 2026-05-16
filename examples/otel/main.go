@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -17,7 +18,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	conn, err := threadify.Connect(ctx, "your-api-key",
+	apiKey := os.Getenv("THREADIFY_API_KEY")
+	if apiKey == "" {
+		apiKey = "your-api-key"
+	}
+
+	conn, err := threadify.Connect(ctx, apiKey,
 		threadify.WithServiceName("delivery-service"),
 		threadify.WithDebug(true),
 	)

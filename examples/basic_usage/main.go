@@ -29,11 +29,17 @@ func main() {
 	fmt.Println("Connected to Threadify!")
 
 	// 2. Start a new thread
-	thread, err := conn.Start(ctx, "", "order_processing")
+	thread, err := conn.Start(ctx, "", threadify.WithContract("order_processing"))
 	if err != nil {
 		log.Fatalf("Failed to start thread: %v", err)
 	}
 	fmt.Printf("Thread started: %s\n", thread.ThreadID)
+
+	if err := thread.AddRefs(ctx, map[string]string{
+		"orderId": "ORD-12345",
+	}); err != nil {
+		log.Fatalf("Failed to add thread refs: %v", err)
+	}
 
 	// 3. Record steps using the fluent API
 	_, err = thread.Step("order_received").

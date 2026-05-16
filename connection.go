@@ -7,6 +7,18 @@ import (
 	"sync"
 )
 
+const (
+	sourceExecution   = "execution"
+	sourceStep        = "step"
+	sourceValidation  = "validation"
+	sourceRule        = "rule"
+	sourceThread      = "thread"
+	eventRulePassed   = "rule.passed"
+	eventRuleViolated = "rule.violated"
+	eventStepSuccess  = "step.success"
+	eventStepFailed   = "step.failed"
+)
+
 type NotificationHandler func(*Notification)
 
 type Connection struct {
@@ -135,16 +147,14 @@ func (c *Connection) IsConnected() bool {
 	return c.isConnected
 }
 
-func (c *Connection) Start(ctx context.Context, label string, contractName string, opts ...StartOption) (*ThreadInstance, error) {
+func (c *Connection) Start(ctx context.Context, label string, args ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected. Call Connect() first")
 	}
 
-	cfg := startConfig{
-		contractName: contractName,
-	}
-	for _, o := range opts {
-		o(&cfg)
+	cfg := startConfig{}
+	for _, opt := range args {
+		opt(&cfg)
 	}
 
 	refs := make(map[string]any)
@@ -197,7 +207,7 @@ func (c *Connection) Start(ctx context.Context, label string, contractName strin
 	}
 
 	threadID := asString(resp[FieldThreadID])
-	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), nil)
+	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), mapStringValues(cfg.refs))
 	thread.Tags = cfg.tags
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
@@ -308,7 +318,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 
 	threadID := asString(resp[FieldThreadID])
 	threadRole := asString(resp[FieldRole])
-	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), nil)
+	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), mapStringValues(asMap(resp[FieldRefs])))
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Joined thread", "threadID", threadID, "role", threadRole)
 	return thread, nil
@@ -454,10 +464,10 @@ func (c *Connection) handleNotification(data map[string]any, ackToken string) {
 func (c *Connection) getEventPattern(notif *Notification) string {
 	source := notif.Source
 	if source == "" {
-		source = "execution"
+		source = sourceExecution
 	}
 
-	eventType := "success"
+	eventType := StatusSuccess
 	if notif.NotificationType != "" {
 		parts := strings.SplitN(notif.NotificationType, ".", 2)
 		if len(parts) == 2 {
@@ -466,9 +476,9 @@ func (c *Connection) getEventPattern(notif *Notification) string {
 	}
 
 	sourceMap := map[string]string{
-		"execution":  "step",
-		"validation": "rule",
-		"thread":     "thread",
+		sourceExecution:  sourceStep,
+		sourceValidation: sourceRule,
+		sourceThread:     sourceThread,
 	}
 
 	sdkSource, ok := sourceMap[source]
@@ -582,8 +592,8 @@ func (c *Connection) GetThreadChain(ctx context.Context, rootID string, maxDepth
 }
 
 func parseEvent(event string) (source, eventType string) {
-	normalized := strings.Replace(event, "step", "execution", 1)
-	normalized = strings.Replace(normalized, "rule", "validation", 1)
+	normalized := strings.Replace(event, sourceStep, sourceExecution, 1)
+	normalized = strings.Replace(normalized, sourceRule, sourceValidation, 1)
 
 	parts := strings.SplitN(normalized, ".", 2)
 	source = "*"
@@ -599,13 +609,13 @@ func parseEvent(event string) (source, eventType string) {
 
 func buildEventTypes(source, eventType string) []string {
 	if source == "*" && eventType == "*" {
-		return []string{"step.success", "step.failed", "rule.passed", "rule.violated"}
+		return []string{eventStepSuccess, eventStepFailed, eventRulePassed, eventRuleViolated}
 	}
-	if source == "step" && eventType == "*" {
-		return []string{"step.success", "step.failed"}
+	if source == sourceStep && eventType == "*" {
+		return []string{eventStepSuccess, eventStepFailed}
 	}
-	if source == "rule" && eventType == "*" {
-		return []string{"rule.passed", "rule.violated"}
+	if source == sourceRule && eventType == "*" {
+		return []string{eventRulePassed, eventRuleViolated}
 	}
 	return []string{source + "." + eventType}
 }

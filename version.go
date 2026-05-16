@@ -1,4 +1,12 @@
 package threadify
 
+import (
+	_ "embed"
+	"strings"
+)
+
+//go:embed VERSION
+var rawVersion string
+
 // Version is the current version of the Threadify Go SDK.
-const Version = "0.1.0"
+var Version = strings.TrimSpace(rawVersion)

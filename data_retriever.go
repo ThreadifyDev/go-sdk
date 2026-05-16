@@ -29,6 +29,7 @@ const (
 	startedBefore = "startedBefore"
 	limit         = "limit"
 	offset        = "offset"
+	optionsKey    = "options"
 
 	contentType  = "Content-Type"
 	apiKeyHeader = "X-API-Key" //nolint:gosec // false positive: header name is not a credential
@@ -379,7 +380,7 @@ func (at *ArchivedThread) Steps(ctx context.Context, stepName, idempotencyKey, s
 		}
 	`, stepFields, stepHistoryFields)
 
-	variables := map[string]any{"threadId": at.ID}
+	variables := map[string]any{threadID: at.ID}
 	if stepName != "" {
 		variables["stepName"] = stepName
 	}
@@ -415,9 +416,9 @@ func (at *ArchivedThread) Steps(ctx context.Context, stepName, idempotencyKey, s
 	return result, nil
 }
 
-func (at *ArchivedThread) ValidationResults(ctx context.Context, limit int) ([]map[string]any, error) {
-	if limit <= 0 {
-		limit = 10
+func (at *ArchivedThread) ValidationResults(ctx context.Context, valLimit int) ([]map[string]any, error) {
+	if valLimit <= 0 {
+		valLimit = 10
 	}
 
 	query := fmt.Sprintf(`
@@ -431,8 +432,8 @@ func (at *ArchivedThread) ValidationResults(ctx context.Context, limit int) ([]m
 	`, validationResultFields)
 
 	data, err := at.client.query(ctx, query, map[string]any{
-		"threadId": at.ID,
-		"options":  map[string]any{"limit": limit},
+		threadID:   at.ID,
+		optionsKey: map[string]any{limit: valLimit},
 	})
 	if err != nil {
 		return nil, err
@@ -603,12 +604,14 @@ func (as *ArchivedStep) History(ctx context.Context, opts *HistoryQueryOptions) 
 	`, stepHistoryFields)
 
 	variables := map[string]any{
-		"threadId": as.ThreadID,
-		"stepName": as.StepName,
-		"limit":    opts.Limit,
+		threadID: as.ThreadID,
+		stepName: as.StepName,
+		limit:    opts.Limit,
 	}
+
+	idempotencyKey := "idempotencyKey"
 	if as.IdempotencyKey != "" {
-		variables["idempotencyKey"] = as.IdempotencyKey
+		variables[idempotencyKey] = as.IdempotencyKey
 	}
 	if opts.Offset > 0 {
 		variables[offset] = opts.Offset
