@@ -152,10 +152,10 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		subStepMaps := make([]map[string]any, len(s.subSteps))
 		for i, ss := range s.subSteps {
 			subStepMaps[i] = map[string]any{
-				"name":       ss.Name,
-				"status":     ss.Status,
-				"payload":    ss.Payload,
-				"recordedAt": ss.RecordedAt,
+				FieldName:       ss.Name,
+				FieldStatus:     ss.Status,
+				FieldPayload:    ss.Payload,
+				FieldRecordedAt: ss.RecordedAt,
 			}
 		}
 		s.event[FieldSubSteps] = subStepMaps
