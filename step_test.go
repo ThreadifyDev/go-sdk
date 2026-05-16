@@ -33,7 +33,6 @@ func TestThreadStep_FluentChaining(t *testing.T) {
 	// Chain methods.
 	stepBuilt := step.
 		AddContext(map[string]any{"orderId": "ORD-123", "amount": 99.99}).
-		AddRefs(map[string]string{"stripe_id": "pi_abc"}).
 		SubStep("validate_inventory", map[string]any{"items": 5})
 
 	// Verify chaining returned the same step.
@@ -48,11 +47,6 @@ func TestThreadStep_FluentChaining(t *testing.T) {
 	}
 	if stepCtx["amount"] != "99.99" {
 		t.Errorf("expected amount '99.99', got %q", stepCtx["amount"])
-	}
-
-	// Verify refs.
-	if step.refs["stripe_id"] != "pi_abc" {
-		t.Errorf("expected ref stripe_id 'pi_abc', got %q", step.refs["stripe_id"])
 	}
 
 	// Verify sub-steps.

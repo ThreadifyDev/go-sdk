@@ -17,8 +17,7 @@ type ThreadStep struct {
 	manualIdempotencyKey string
 	subSteps             []SubStepData
 	event                map[string]any
-	context              map[string]string
-	refs                 map[string]string
+	context              map[string]any
 	metadata             map[string]any
 	err                  error
 }
@@ -28,8 +27,7 @@ func newThreadStep(stepName string, thread *ThreadInstance, serviceName string) 
 		stepName:    stepName,
 		thread:      thread,
 		serviceName: serviceName,
-		context:     make(map[string]string),
-		refs:        make(map[string]string),
+		context:     make(map[string]any),
 		event: map[string]any{
 			FieldAction:     ActionRecordThreadEvent,
 			FieldThreadID:   thread.ThreadID,
@@ -59,7 +57,7 @@ func (s *ThreadStep) AddContext(data map[string]any) *ThreadStep {
 		return s
 	}
 	for k, v := range data {
-		s.context[k] = fmt.Sprintf("%v", v)
+		s.context[k] = v
 	}
 	return s
 }
@@ -69,19 +67,8 @@ func (s *ThreadStep) AddPrivateContext(data map[string]any) *ThreadStep {
 		return s
 	}
 	for k, v := range data {
-		str := fmt.Sprintf("%v", v)
-		s.context[k] = str
-		s.context["private_"+k] = str
-	}
-	return s
-}
-
-func (s *ThreadStep) AddRefs(refs map[string]string) *ThreadStep {
-	if s.err != nil || refs == nil {
-		return s
-	}
-	for k, v := range refs {
-		s.refs[k] = v
+		s.context[k] = v
+		s.context["private_"+k] = v
 	}
 	return s
 }
@@ -133,7 +120,6 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 	s.event[FieldFinishedAt] = nowISO()
 	s.event[FieldStatus] = status
 	s.event[FieldContext] = s.context
-	s.event[FieldRefs] = s.refs
 
 	if len(messageOrData) > 0 {
 		s.handleStopMetadata(messageOrData[0])
@@ -274,8 +260,8 @@ func (s *ThreadStep) GetStatus() string {
 	return asString(s.event[FieldStatus])
 }
 
-func (s *ThreadStep) GetContext() map[string]string {
-	out := make(map[string]string, len(s.context))
+func (s *ThreadStep) GetContext() map[string]any {
+	out := make(map[string]any, len(s.context))
 	for k, v := range s.context {
 		out[k] = v
 	}
