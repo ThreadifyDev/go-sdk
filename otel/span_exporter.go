@@ -227,8 +227,11 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 	if tags := attrStringSlice(span.Attributes(), "threadify.tags"); len(tags) > 0 {
 		opts = append(opts, threadify.WithTags(tags...))
 	}
+	if contractName != "" {
+		opts = append(opts, threadify.WithContract(contractName))
+	}
 
-	thread, err = e.conn.Start(ctx, label, contractName, opts...)
+	thread, err = e.conn.Start(ctx, label, opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -135,16 +135,14 @@ func (c *Connection) IsConnected() bool {
 	return c.isConnected
 }
 
-func (c *Connection) Start(ctx context.Context, label string, contractName string, opts ...StartOption) (*ThreadInstance, error) {
+func (c *Connection) Start(ctx context.Context, label string, args ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected. Call Connect() first")
 	}
 
-	cfg := startConfig{
-		contractName: contractName,
-	}
-	for _, o := range opts {
-		o(&cfg)
+	cfg := startConfig{}
+	for _, opt := range args {
+		opt(&cfg)
 	}
 
 	refs := make(map[string]any)
@@ -197,7 +195,7 @@ func (c *Connection) Start(ctx context.Context, label string, contractName strin
 	}
 
 	threadID := asString(resp[FieldThreadID])
-	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), nil)
+	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), mapStringValues(cfg.refs))
 	thread.Tags = cfg.tags
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
@@ -308,7 +306,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 
 	threadID := asString(resp[FieldThreadID])
 	threadRole := asString(resp[FieldRole])
-	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), nil)
+	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), mapStringValues(asMap(resp[FieldRefs])))
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Joined thread", "threadID", threadID, "role", threadRole)
 	return thread, nil

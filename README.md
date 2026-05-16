@@ -28,7 +28,7 @@ func main() {
 	conn, _ := threadify.Connect(ctx, "your-api-key")
 	defer conn.Close()
 
-	thread, err := conn.Start(ctx, "", "order_flow")
+	thread, err := conn.Start(ctx, "", threadify.WithContract("order_flow"))
 
     if err != nil {
         log.Fatal(err)
@@ -51,14 +51,14 @@ Start a thread, optionally associating it with a contract.
 
 ```go
 // Start a generic thread
-thread, err := conn.Start(ctx, "", "")
+thread, err := conn.Start(ctx, "")
 
 if err != nil {
     log.Fatal(err)
 }
 
 // Start a thread for a specific contract
-thread, err := conn.Start(ctx, "Order Processing Label", "order_processing")
+thread, err := conn.Start(ctx, "Order Processing Label", threadify.WithContract("order_processing"))
 
 if err != nil {
     log.Fatal(err)
@@ -92,18 +92,22 @@ if err != nil {
 
 ### 4. Record Steps
 
-Record steps in a thread's lifecycle. You can add context, references, and sub-steps.
+Record steps in a thread's lifecycle. Add thread refs on the thread, and keep step data on the step.
 
 ```go
+err := thread.AddRefs(ctx, map[string]string{
+    "orderId": "ORD-999",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
 step := thread.Step("order_shipped")
 
 _, err = step.
     AddContext(map[string]any{
         "trackingNumber": "TRK123456",
         "carrier":        "FedEx",
-    }).
-    AddRefs(map[string]string{
-        "orderId": "ORD-999",
     }).
     Success(ctx, "Order has been shipped successfully")
 
@@ -160,16 +164,32 @@ The SDK uses the Functional Option pattern for configuration.
 
 ## Versioning & Releases
 
-This SDK follows [Semantic Versioning](https://semver.org/) and [Conventional Commits](https://www.conventionalcommits.org/). Releases are automated via GitHub Actions.
+This SDK follows [Semantic Versioning](https://semver.org/). Releases are published from Git tags via GitHub Actions.
 
-### Automated Increments
-Whenever changes are merged to the `main` branch, the release system analyzes commit messages to determine the next version:
-- `fix: ...` -> Patch bump (e.g., v0.1.0 -> v0.1.1)
-- `feat: ...` -> Minor bump (e.g., v0.1.0 -> v0.2.0)
-- `feat!: ...` or `BREAKING CHANGE: ...` -> Major bump (e.g., v0.1.0 -> v1.0.0)
+### Bumping a Version
+Update the SDK version locally with:
+
+```bash
+make bump-version VERSION=0.2.1
+```
+
+This updates the repo's `VERSION` file, which is the source for `threadify.Version`.
+
+### Publishing a Release
+After updating `VERSION` and merging your changes:
+
+```bash
+git tag v0.2.1
+git push origin v0.2.1
+```
+
+Pushing a `v*` tag triggers the release workflow, which:
+- runs the root SDK test suite
+- runs the `otel` sub-module test suite
+- creates a GitHub Release for that tag
 
 ### Manual Version Access
-The current version of the SDK is available via the `threadify.Version` constant.
+The current version of the SDK is available via the `threadify.Version` value, which is sourced from the repo's `VERSION` file.
 
 ```go
 fmt.Println("Threadify Go SDK Version:", threadify.Version)
