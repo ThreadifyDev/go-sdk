@@ -118,12 +118,6 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		return nil, s.err
 	}
 
-	if len(s.refs) > 0 {
-		if err := s.thread.AddRefs(ctx, s.refs); err != nil {
-			return nil, fmt.Errorf("add step refs: %w", err)
-		}
-	}
-
 	s.event[FieldFinishedAt] = nowISO()
 	s.event[FieldStatus] = status
 	s.event[FieldContext] = s.context

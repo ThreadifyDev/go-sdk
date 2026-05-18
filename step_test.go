@@ -148,12 +148,6 @@ func TestThreadStep_Success(t *testing.T) {
 
 	step := thread.Step("order_placed")
 	step.AddContext(map[string]any{"orderId": testOrderID})
-	step.AddRefs(map[string]string{"stripe_id": "pi_abc"})
-
-	mt.enqueueResponse(map[string]any{
-		"action": "addRefs",
-		"status": "success",
-	})
 
 	// Enqueue recordThreadEvent response.
 	mt.enqueueResponse(map[string]any{
@@ -179,16 +173,7 @@ func TestThreadStep_Success(t *testing.T) {
 		t.Error("expected non-duplicate result")
 	}
 
-	if thread.Refs["stripe_id"] != "pi_abc" {
-		t.Errorf("expected ref stripe_id 'pi_abc', got %q", thread.Refs["stripe_id"])
-	}
-
 	sent := mt.getSent()
-	addRefsMsg := sent[len(sent)-2]
-	if addRefsMsg["action"] != "addRefs" {
-		t.Fatalf("expected addRefs before recordThreadEvent, got %v", addRefsMsg["action"])
-	}
-
 	recordMsg := sent[len(sent)-1]
 	if recordMsg["action"] != "recordThreadEvent" {
 		t.Fatalf("expected recordThreadEvent, got %v", recordMsg["action"])
