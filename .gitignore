@@ -17,3 +17,6 @@ vendor/
 .DS_Store
 coverage.html
 coverage.out
+
+# Local runnable sample server
+sample_server_test.go
