@@ -576,7 +576,7 @@ func (c *Connection) heartbeatLoop() {
 			connected := c.isConnected
 			c.mu.Unlock()
 			if connected {
-				_ = c.send(map[string]any{FieldAction: ActionHeartbeat})
+				_ = c.send(context.Background(), map[string]any{FieldAction: ActionHeartbeat})
 			}
 		}
 	}
