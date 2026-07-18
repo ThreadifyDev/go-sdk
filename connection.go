@@ -56,18 +56,18 @@ type Connection struct {
 
 func newConnection(transport Transport, apiKey, serviceName string, opts *ConnectOptions) *Connection {
 	c := &Connection{
-		transport:     transport,
-		apiKey:        apiKey,
-		serviceName:   serviceName,
-		graphqlURL:    opts.GraphQLURL,
-		debug:         opts.Debug,
-		logger:        opts.Logger,
-		maxInFlight:   opts.MaxInFlight,
-    requestTimeout: opts.RequestTimeout,
-		isConnected:   true,
-		recvCh:        make(chan map[string]any, 256),
-		stopCh:        make(chan struct{}),
-		heartbeatStop: make(chan struct{}),
+		transport:      transport,
+		apiKey:         apiKey,
+		serviceName:    serviceName,
+		graphqlURL:     opts.GraphQLURL,
+		debug:          opts.Debug,
+		logger:         opts.Logger,
+		maxInFlight:    opts.MaxInFlight,
+		requestTimeout: opts.RequestTimeout,
+		isConnected:    true,
+		recvCh:         make(chan map[string]any, 256),
+		stopCh:         make(chan struct{}),
+		heartbeatStop:  make(chan struct{}),
 	}
 	go c.readLoop()
 	go c.heartbeatLoop()
