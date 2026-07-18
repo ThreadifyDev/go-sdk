@@ -9,7 +9,7 @@ import (
 
 func TestValidateContext(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		if err := validateContext(nil); err == nil || err.Error() != "context cannot be nil" {
+		if err := validateContext(context.Context(nil)); err == nil || err.Error() != "context cannot be nil" {
 			t.Fatalf("validateContext(nil) error = %v, want context cannot be nil", err)
 		}
 	})

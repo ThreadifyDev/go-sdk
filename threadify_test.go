@@ -104,7 +104,7 @@ func TestConnect_Timeout(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	factory := Create(Config{
+	factory := Create(&Config{
 		APIKey:      "test-key",
 		ServiceName: "my-service",
 		WSURL:       "wss://example.com/threads",
@@ -116,7 +116,7 @@ func TestCreate(t *testing.T) {
 }
 
 func TestFactoryConnectOptions_UsesDefaultWSURLWhenUnset(t *testing.T) {
-	factory := Create(Config{
+	factory := Create(&Config{
 		APIKey:      "test-key",
 		ServiceName: "my-service",
 	})

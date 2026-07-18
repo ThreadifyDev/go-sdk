@@ -143,8 +143,8 @@ func Connect(ctx context.Context, apiKey string, opts ...Option) (*Connection, e
 	}
 }
 
-func Create(config Config) *Factory {
-	return &Factory{config: config}
+func Create(config *Config) *Factory {
+	return &Factory{config: *config}
 }
 
 // Config holds static configuration for the Connection Factory.
