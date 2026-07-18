@@ -16,6 +16,7 @@
 
 * Prevent nil, cancelled, or expired contexts from sending thread and step requests.
 * Preserve local subscription state when an unsubscribe request cannot be sent.
+* Update the OTEL exporter to attach span references through `ThreadInstance.AddRefs` after the step-level refs API was removed.
 
 ## [0.2.0](https://github.com/creativeJoe007/ThreadifyEngine/compare/threadify-sdk-go-v0.1.0...threadify-sdk-go-v0.2.0) (2026-02-19)
 
