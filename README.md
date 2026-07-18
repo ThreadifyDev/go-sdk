@@ -25,8 +25,8 @@ import (
 
 func main() {
 	ctx := context.Background()
-	conn, _ := threadify.Connect(ctx, "your-api-key")
-	defer conn.Close()
+conn, _ := threadify.Connect(ctx, "your-api-key")
+defer conn.Close()
 
 	thread, err := conn.Start(ctx, "", threadify.WithContract("order_flow"))
 
@@ -43,6 +43,17 @@ func main() {
 		log.Fatal(err)
 	}
 }
+```
+
+Ordinary SDK requests have a 1-second timeout by default, so callers can use
+`context.Background()` without creating a deadline for every operation. Caller
+cancellation and shorter deadlines still take precedence. Configure the SDK
+default when connecting if needed:
+
+```go
+conn, err := threadify.Connect(ctx, "your-api-key",
+    threadify.WithRequestTimeout(15*time.Second),
+)
 ```
 
 ### 2. Start a New Thread
@@ -170,7 +181,7 @@ This SDK follows [Semantic Versioning](https://semver.org/). Releases are publis
 Update the SDK version locally with:
 
 ```bash
-make bump-version VERSION=0.2.1
+make bump-version VERSION=0.3.0
 ```
 
 This updates the repo's `VERSION` file, which is the source for `threadify.Version`.
@@ -179,8 +190,8 @@ This updates the repo's `VERSION` file, which is the source for `threadify.Versi
 After updating `VERSION` and merging your changes:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Pushing a `v*` tag triggers the release workflow, which:

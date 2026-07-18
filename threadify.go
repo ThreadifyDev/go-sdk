@@ -54,6 +54,14 @@ func WithConnectTimeout(d time.Duration) Option {
 	}
 }
 
+// WithRequestTimeout sets the maximum duration for ordinary SDK requests.
+// A shorter deadline on the caller's context still takes precedence.
+func WithRequestTimeout(d time.Duration) Option {
+	return func(o *ConnectOptions) {
+		o.RequestTimeout = d
+	}
+}
+
 func WithDialer(d Dialer) Option {
 	return func(o *ConnectOptions) {
 		o.Dialer = d
@@ -61,6 +69,9 @@ func WithDialer(d Dialer) Option {
 }
 
 func Connect(ctx context.Context, apiKey string, opts ...Option) (*Connection, error) {
+	if err := validateContext(ctx); err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
 	if err := requireNonEmpty("apiKey", apiKey); err != nil {
 		return nil, err
 	}
@@ -132,17 +143,18 @@ func Connect(ctx context.Context, apiKey string, opts ...Option) (*Connection, e
 	}
 }
 
-func Create(config Config) *Factory {
-	return &Factory{config: config}
+func Create(config *Config) *Factory {
+	return &Factory{config: *config}
 }
 
 // Config holds static configuration for the Connection Factory.
 type Config struct {
-	APIKey      string
-	ServiceName string
-	WSURL       string
-	GraphQLURL  string
-	Debug       bool
+	APIKey         string
+	ServiceName    string
+	WSURL          string
+	GraphQLURL     string
+	Debug          bool
+	RequestTimeout time.Duration
 }
 
 // Factory creates connections based on a static configuration.
@@ -166,6 +178,9 @@ func (f *Factory) connectOptions() []Option {
 	}
 	if f.config.GraphQLURL != "" {
 		opts = append(opts, WithGraphQLURL(f.config.GraphQLURL))
+	}
+	if f.config.RequestTimeout != 0 {
+		opts = append(opts, WithRequestTimeout(f.config.RequestTimeout))
 	}
 	return opts
 }

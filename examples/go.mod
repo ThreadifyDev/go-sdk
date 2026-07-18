@@ -1,6 +1,6 @@
 module github.com/ThreadifyDev/go-sdk/examples
 
-go 1.22
+go 1.25.0
 
 require github.com/ThreadifyDev/go-sdk v0.0.0
 

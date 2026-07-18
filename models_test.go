@@ -2,6 +2,7 @@ package threadify
 
 import (
 	"testing"
+	"time"
 )
 
 func TestDeriveGraphQLURL(t *testing.T) {
@@ -121,13 +122,16 @@ func TestConnectOptions_withDefaults(t *testing.T) {
 	if opts.GraphQLURL != "https://eng.threadify.dev/graphql" {
 		t.Errorf("expected default GraphQLURL to be derived from default WSURL, got %q", opts.GraphQLURL)
 	}
+	if opts.RequestTimeout != time.Second {
+		t.Errorf("expected default RequestTimeout to be 1s, got %v", opts.RequestTimeout)
+	}
 }
 
 func TestConnectOptions_Validate(t *testing.T) {
-	opts := ConnectOptions{
+	opts := (&ConnectOptions{
 		WSURL:       "wss://example.com",
 		MaxInFlight: 10,
-	}
+	}).withDefaults()
 	if err := opts.validate(); err != nil {
 		t.Errorf("validate() error: %v", err)
 	}
@@ -146,6 +150,12 @@ func TestConnectOptions_Validate(t *testing.T) {
 	opts.WSURL = ""
 	if err := opts.validate(); err == nil {
 		t.Error("expected error for empty WSURL")
+	}
+
+	opts.WSURL = "wss://example.com"
+	opts.RequestTimeout = -time.Second
+	if err := opts.validate(); err == nil {
+		t.Error("expected error for negative RequestTimeout")
 	}
 }
 

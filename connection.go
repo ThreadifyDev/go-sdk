@@ -23,13 +23,14 @@ const (
 type NotificationHandler func(*Notification)
 
 type Connection struct {
-	transport   Transport
-	apiKey      string
-	serviceName string
-	graphqlURL  string
-	debug       bool
-	logger      Logger
-	maxInFlight int
+	transport      Transport
+	apiKey         string
+	serviceName    string
+	graphqlURL     string
+	debug          bool
+	logger         Logger
+	maxInFlight    int
+	requestTimeout time.Duration
 
 	mu          sync.Mutex
 	isConnected bool
@@ -55,17 +56,18 @@ type Connection struct {
 
 func newConnection(transport Transport, apiKey, serviceName string, opts *ConnectOptions) *Connection {
 	c := &Connection{
-		transport:     transport,
-		apiKey:        apiKey,
-		serviceName:   serviceName,
-		graphqlURL:    opts.GraphQLURL,
-		debug:         opts.Debug,
-		logger:        opts.Logger,
-		maxInFlight:   opts.MaxInFlight,
-		isConnected:   true,
-		recvCh:        make(chan map[string]any, 256),
-		stopCh:        make(chan struct{}),
-		heartbeatStop: make(chan struct{}),
+		transport:      transport,
+		apiKey:         apiKey,
+		serviceName:    serviceName,
+		graphqlURL:     opts.GraphQLURL,
+		debug:          opts.Debug,
+		logger:         opts.Logger,
+		maxInFlight:    opts.MaxInFlight,
+		requestTimeout: opts.RequestTimeout,
+		isConnected:    true,
+		recvCh:         make(chan map[string]any, 256),
+		stopCh:         make(chan struct{}),
+		heartbeatStop:  make(chan struct{}),
 	}
 	go c.readLoop()
 	go c.heartbeatLoop()
@@ -136,7 +138,20 @@ func (c *Connection) waitResponse(ctx context.Context, match func(map[string]any
 	}
 }
 
-func (c *Connection) send(msg map[string]any) error {
+func (c *Connection) send(ctx context.Context, msg map[string]any) error {
+	requestCtx, cancel, err := boundedContext(ctx, c.requestTimeout)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	return c.sendWithContext(requestCtx, msg)
+}
+
+func (c *Connection) sendWithContext(ctx context.Context, msg map[string]any) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	connected := c.isConnected
 	c.mu.Unlock()
@@ -145,6 +160,19 @@ func (c *Connection) send(msg map[string]any) error {
 		return fmt.Errorf("WebSocket is not connected")
 	}
 	return c.transport.Send(msg)
+}
+
+func (c *Connection) request(ctx context.Context, msg map[string]any, match func(map[string]any) bool) (map[string]any, error) {
+	requestCtx, cancel, err := boundedContext(ctx, c.requestTimeout)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	if err := c.sendWithContext(requestCtx, msg); err != nil {
+		return nil, err
+	}
+	return c.waitResponse(requestCtx, match)
 }
 
 func (c *Connection) IsConnected() bool {
@@ -197,11 +225,7 @@ func (c *Connection) Start(ctx context.Context, label string, args ...StartOptio
 		msg[FieldTags] = cfg.tags
 	}
 
-	if err := c.send(msg); err != nil {
-		return nil, err
-	}
-
-	resp, err := c.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := c.request(ctx, msg, func(m map[string]any) bool {
 		return asString(m[FieldAction]) == ActionStartThread
 	})
 	if err != nil {
@@ -306,11 +330,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 		return nil, fmt.Errorf("either WithJoinToken or WithJoinThreadID must be provided")
 	}
 
-	if err := c.send(msg); err != nil {
-		return nil, err
-	}
-
-	resp, err := c.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := c.request(ctx, msg, func(m map[string]any) bool {
 		return asString(m[FieldAction]) == ActionJoinThread
 	})
 	if err != nil {
@@ -356,7 +376,7 @@ func (c *Connection) Subscribe(ctx context.Context, event, stepName string, hand
 
 	source, eventType := parseEvent(event)
 	eventTypes := buildEventTypes(source, eventType)
-	if err := c.sendSubscription(stepName, eventTypes); err != nil {
+	if err := c.sendSubscription(ctx, stepName, eventTypes); err != nil {
 		return err
 	}
 
@@ -372,11 +392,11 @@ func (c *Connection) Subscribe(ctx context.Context, event, stepName string, hand
 
 func (c *Connection) Unsubscribe(ctx context.Context, event, stepName string) error {
 	handlerKey := event + ":" + stepName
-	c.notificationHandlers.Delete(handlerKey)
 
 	hasHandlers := false
 	c.notificationHandlers.Range(func(key, _ any) bool {
-		if strings.HasSuffix(key.(string), ":"+stepName) {
+		keyString := key.(string)
+		if keyString != handlerKey && strings.HasSuffix(keyString, ":"+stepName) {
 			hasHandlers = true
 			return false
 		}
@@ -384,11 +404,12 @@ func (c *Connection) Unsubscribe(ctx context.Context, event, stepName string) er
 	})
 
 	if !hasHandlers {
-		if err := c.sendUnsubscription(stepName); err != nil {
+		if err := c.sendUnsubscription(ctx, stepName); err != nil {
 			return err
 		}
 	}
 
+	c.notificationHandlers.Delete(handlerKey)
 	return nil
 }
 
@@ -397,7 +418,7 @@ type handlerList struct {
 	handlers []NotificationHandler
 }
 
-func (c *Connection) sendSubscription(stepName string, eventTypes []string) error {
+func (c *Connection) sendSubscription(ctx context.Context, stepName string, eventTypes []string) error {
 	if !c.IsConnected() {
 		return fmt.Errorf("not connected")
 	}
@@ -412,7 +433,7 @@ func (c *Connection) sendSubscription(stepName string, eventTypes []string) erro
 		return nil
 	}
 
-	err := c.send(map[string]any{
+	err := c.send(ctx, map[string]any{
 		FieldAction:     ActionSubscribe,
 		FieldStepName:   stepName,
 		FieldEventTypes: merged,
@@ -425,12 +446,12 @@ func (c *Connection) sendSubscription(stepName string, eventTypes []string) erro
 	return nil
 }
 
-func (c *Connection) sendUnsubscription(stepName string) error {
+func (c *Connection) sendUnsubscription(ctx context.Context, stepName string) error {
 	if !c.IsConnected() {
 		return fmt.Errorf("not connected")
 	}
 
-	err := c.send(map[string]any{
+	err := c.send(ctx, map[string]any{
 		FieldAction:   ActionUnsubscribe,
 		FieldStepName: stepName,
 	})
@@ -555,7 +576,7 @@ func (c *Connection) heartbeatLoop() {
 			connected := c.isConnected
 			c.mu.Unlock()
 			if connected {
-				_ = c.send(map[string]any{FieldAction: ActionHeartbeat})
+				_ = c.send(context.Background(), map[string]any{FieldAction: ActionHeartbeat})
 			}
 		}
 	}
@@ -567,7 +588,7 @@ func (c *Connection) sendAck(notificationID, threadID, ackToken string) {
 		return
 	}
 
-	_ = c.send(map[string]any{
+	_ = c.send(context.Background(), map[string]any{
 		FieldAction:            ActionAckNotification,
 		FieldNotificationAckID: notificationID,
 		FieldThreadAckID:       threadID,
@@ -585,7 +606,7 @@ func (c *Connection) getDataRetriever() (*DataRetriever, error) {
 			initErr = fmt.Errorf("GraphQL URL not configured")
 			return
 		}
-		c.dataRetriever = NewDataRetriever(c.graphqlURL, c.apiKey)
+		c.dataRetriever = newDataRetriever(c.graphqlURL, c.apiKey, c.requestTimeout)
 	})
 	if initErr != nil {
 		return nil, initErr

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	threadify "github.com/ThreadifyDev/go-sdk"
 )
@@ -16,8 +15,7 @@ func main() {
 		apiKey = "your-api-key"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	// 1. Connect to Threadify
 	conn, err := threadify.Connect(ctx, apiKey)
@@ -35,9 +33,10 @@ func main() {
 	}
 	fmt.Printf("Thread started: %s\n", thread.ThreadID)
 
-	if err := thread.AddRefs(ctx, map[string]string{
+	err = thread.AddRefs(ctx, map[string]string{
 		"orderId": "ORD-12345",
-	}); err != nil {
+	})
+	if err != nil {
 		log.Fatalf("Failed to add thread refs: %v", err)
 	}
 

@@ -46,6 +46,7 @@ linters:
           - errcheck
           - goconst
           - gocritic
+          - gocyclo
       - linters:
           - revive
         text: "should have comment or be unexported"
