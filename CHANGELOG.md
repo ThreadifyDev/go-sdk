@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/ThreadifyDev/go-sdk/compare/v0.2.1...v0.3.0) (2026-07-18)
+
+### Added
+
+* Add SDK-managed request timeouts for WebSocket request/response operations and GraphQL queries, with a one-second default.
+* Add `WithRequestTimeout` to configure the default while preserving shorter caller deadlines and cancellation.
+
+### Changed
+
+* Allow callers to use `context.Background()` for ordinary SDK operations without manually creating a timeout for every request.
+* Centralize WebSocket context validation and request timeout handling at the connection boundary.
+
+### Fixed
+
+* Prevent nil, cancelled, or expired contexts from sending thread and step requests.
+* Preserve local subscription state when an unsubscribe request cannot be sent.
+
 ## [0.2.0](https://github.com/creativeJoe007/ThreadifyEngine/compare/threadify-sdk-go-v0.1.0...threadify-sdk-go-v0.2.0) (2026-02-19)
 
 

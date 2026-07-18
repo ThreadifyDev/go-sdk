@@ -78,11 +78,7 @@ func (t *ThreadInstance) InviteParty(ctx context.Context, opts InviteOptions) (*
 		FieldExpiresIn:   expiresIn,
 	}
 
-	if err := t.send(msg); err != nil {
-		return nil, err
-	}
-
-	resp, err := t.conn.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := t.conn.request(ctx, msg, func(m map[string]any) bool {
 		return asString(m[FieldAction]) == ActionInviteParty
 	})
 	if err != nil {
@@ -105,6 +101,9 @@ func (t *ThreadInstance) InviteParty(ctx context.Context, opts InviteOptions) (*
 func (t *ThreadInstance) WaitFor(ctx context.Context, stepName string, opts *WaitOptions) (*Notification, error) {
 	if t == nil {
 		return nil, fmt.Errorf("ThreadInstance is nil")
+	}
+	if err := validateContext(ctx); err != nil {
+		return nil, fmt.Errorf("wait for step: %w", err)
 	}
 	if err := requireNonEmpty("stepName", stepName); err != nil {
 		return nil, err
@@ -160,11 +159,7 @@ func (t *ThreadInstance) AddRefs(ctx context.Context, refs map[string]string) er
 		FieldRefs:     refsAny,
 	}
 
-	if err := t.send(msg); err != nil {
-		return err
-	}
-
-	resp, err := t.conn.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := t.conn.request(ctx, msg, func(m map[string]any) bool {
 		return asString(m[FieldAction]) == ActionAddRefs
 	})
 	if err != nil {
@@ -240,11 +235,7 @@ func (t *ThreadInstance) endThread(ctx context.Context, status, reason string) (
 		msg[FieldReason] = reason
 	}
 
-	if err := t.send(msg); err != nil {
-		return nil, err
-	}
-
-	resp, err := t.conn.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := t.conn.request(ctx, msg, func(m map[string]any) bool {
 		a := asString(m[FieldAction])
 		return a == ActionThreadEnd
 	})
@@ -272,10 +263,6 @@ func (t *ThreadInstance) endThread(ctx context.Context, status, reason string) (
 		EndedAt:  endedAt,
 		Message:  asString(resp["message"]),
 	}, nil
-}
-
-func (t *ThreadInstance) send(msg map[string]any) error {
-	return t.conn.send(msg)
 }
 
 func (t *ThreadInstance) handleNotification(notif *Notification) {

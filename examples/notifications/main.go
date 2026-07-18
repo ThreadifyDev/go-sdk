@@ -16,8 +16,7 @@ func main() {
 		apiKey = "your-api-key"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	// 1. Connect
 	conn, err := threadify.Connect(ctx, apiKey)
@@ -48,8 +47,8 @@ func main() {
 
 	// 3. Wait for a specific step to be completed (by another party)
 	// This blocks until the notification arrives or context times out.
-	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
+	waitCtx, cancelWait := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancelWait()
 
 	notif, err := thread.WaitFor(waitCtx, "payment_confirmed", &threadify.WaitOptions{
 		Statuses: []string{"success"},

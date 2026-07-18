@@ -3,10 +3,26 @@ package threadify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+func TestGraphQLClient_QueryUsesSDKRequestTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer server.Close()
+
+	client := newGraphQLClient(server.URL, "test-key", 20*time.Millisecond)
+	_, err := client.query(context.Background(), "query { thread(id: \"test\") { id } }", nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("query() error = %v, want context.DeadlineExceeded", err)
+	}
+}
 
 func TestGraphQLClient_Query_Success(t *testing.T) {
 	responseData := map[string]any{

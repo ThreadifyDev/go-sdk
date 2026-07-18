@@ -205,11 +205,7 @@ func (s *ThreadStep) sendEvent(ctx context.Context) (map[string]any, error) {
 		return nil, fmt.Errorf("thread not started")
 	}
 
-	if err := s.thread.send(s.event); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.thread.conn.waitResponse(ctx, func(m map[string]any) bool {
+	resp, err := s.thread.conn.request(ctx, s.event, func(m map[string]any) bool {
 		return asString(m[FieldAction]) == ActionRecordThreadEvent
 	})
 	if err != nil {

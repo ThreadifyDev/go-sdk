@@ -56,6 +56,15 @@ func TestConnect_InvalidMaxInFlight(t *testing.T) {
 	}
 }
 
+func TestWithRequestTimeout(t *testing.T) {
+	opts := (&ConnectOptions{}).withDefaults()
+	WithRequestTimeout(250 * time.Millisecond)(&opts)
+
+	if opts.RequestTimeout != 250*time.Millisecond {
+		t.Fatalf("RequestTimeout = %v, want 250ms", opts.RequestTimeout)
+	}
+}
+
 func TestConnect_ServerRejectsConnection(t *testing.T) {
 	mt := newMockTransport()
 	mt.enqueueResponse(map[string]any{

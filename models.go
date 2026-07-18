@@ -8,7 +8,7 @@ import (
 
 const (
 	defaultConnectTimeout   = 10 * time.Second
-	defaultRequestTimeout   = 10 * time.Second
+	defaultRequestTimeout   = time.Second
 	defaultWaitTimeout      = 5 * time.Second
 	defaultMaxInFlight      = 10
 	minMaxInFlight          = 1
@@ -129,6 +129,7 @@ type ConnectOptions struct {
 	Logger         Logger
 	MaxInFlight    int
 	ConnectTimeout time.Duration
+	RequestTimeout time.Duration
 	Dialer         Dialer
 	ServiceName    string
 }
@@ -148,6 +149,9 @@ func (o *ConnectOptions) withDefaults() ConnectOptions {
 	if out.ConnectTimeout == 0 {
 		out.ConnectTimeout = defaultConnectTimeout
 	}
+	if out.RequestTimeout == 0 {
+		out.RequestTimeout = defaultRequestTimeout
+	}
 	if out.Dialer == nil {
 		out.Dialer = &GorillaDialer{}
 	}
@@ -160,6 +164,12 @@ func (o *ConnectOptions) validate() error {
 	}
 	if o.MaxInFlight < minMaxInFlight || o.MaxInFlight > maxMaxInFlight {
 		return fmt.Errorf("maxInFlight must be between %d and %d", minMaxInFlight, maxMaxInFlight)
+	}
+	if o.ConnectTimeout <= 0 {
+		return fmt.Errorf("connectTimeout must be greater than zero")
+	}
+	if o.RequestTimeout <= 0 {
+		return fmt.Errorf("requestTimeout must be greater than zero")
 	}
 	if o.Logger == nil {
 		o.Logger = &nopLogger{}

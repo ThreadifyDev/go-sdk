@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -109,20 +110,32 @@ const (
 )
 
 type GraphQLClient struct {
-	url    string
-	apiKey string
-	client *http.Client
+	url            string
+	apiKey         string
+	client         *http.Client
+	requestTimeout time.Duration
 }
 
 func NewGraphQLClient(url, apiKey string) *GraphQLClient {
+	return newGraphQLClient(url, apiKey, defaultRequestTimeout)
+}
+
+func newGraphQLClient(url, apiKey string, requestTimeout time.Duration) *GraphQLClient {
 	return &GraphQLClient{
-		url:    url,
-		apiKey: apiKey,
-		client: http.DefaultClient,
+		url:            url,
+		apiKey:         apiKey,
+		client:         http.DefaultClient,
+		requestTimeout: requestTimeout,
 	}
 }
 
 func (g *GraphQLClient) query(ctx context.Context, gqlQuery string, variables map[string]any) (map[string]any, error) {
+	requestCtx, cancel, err := boundedContext(ctx, g.requestTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("GraphQL request: %w", err)
+	}
+	defer cancel()
+
 	body := map[string]any{
 		queryKey:     gqlQuery,
 		variablesKey: variables,
@@ -133,7 +146,7 @@ func (g *GraphQLClient) query(ctx context.Context, gqlQuery string, variables ma
 		return nil, fmt.Errorf("marshal GraphQL body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.url, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, g.url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -178,8 +191,12 @@ type DataRetriever struct {
 }
 
 func NewDataRetriever(graphqlURL, apiKey string) *DataRetriever {
+	return newDataRetriever(graphqlURL, apiKey, defaultRequestTimeout)
+}
+
+func newDataRetriever(graphqlURL, apiKey string, requestTimeout time.Duration) *DataRetriever {
 	return &DataRetriever{
-		client: NewGraphQLClient(graphqlURL, apiKey),
+		client: newGraphQLClient(graphqlURL, apiKey, requestTimeout),
 	}
 }
 
