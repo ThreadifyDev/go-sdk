@@ -122,7 +122,9 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		step.AddContext(contextData)
 	}
 	if len(refs) > 0 {
-		step.AddRefs(refs)
+		if err := thread.AddRefs(ctx, refs); err != nil {
+			return fmt.Errorf("add span refs: %w", err)
+		}
 	}
 
 	for _, evt := range span.Events() {
