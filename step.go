@@ -18,7 +18,6 @@ type ThreadStep struct {
 	subSteps             []SubStepData
 	event                map[string]any
 	context              map[string]string
-	refs                 map[string]string
 	metadata             map[string]any
 	err                  error
 }
@@ -29,7 +28,6 @@ func newThreadStep(stepName string, thread *ThreadInstance, serviceName string) 
 		thread:      thread,
 		serviceName: serviceName,
 		context:     make(map[string]string),
-		refs:        make(map[string]string),
 		event: map[string]any{
 			FieldAction:     ActionRecordThreadEvent,
 			FieldThreadID:   thread.ThreadID,
@@ -76,16 +74,6 @@ func (s *ThreadStep) AddPrivateContext(data map[string]any) *ThreadStep {
 	return s
 }
 
-func (s *ThreadStep) AddRefs(refs map[string]string) *ThreadStep {
-	if s.err != nil || refs == nil {
-		return s
-	}
-	for k, v := range refs {
-		s.refs[k] = v
-	}
-	return s
-}
-
 func (s *ThreadStep) SubStep(name string, data map[string]any, status ...string) *ThreadStep {
 	if s.err != nil {
 		return s
@@ -128,12 +116,6 @@ func (s *ThreadStep) Error(ctx context.Context, messageOrData ...any) (*StepResu
 func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...any) (*StepResult, error) {
 	if s.err != nil {
 		return nil, s.err
-	}
-
-	if len(s.refs) > 0 {
-		if err := s.thread.AddRefs(ctx, s.refs); err != nil {
-			return nil, fmt.Errorf("add step refs: %w", err)
-		}
 	}
 
 	s.event[FieldFinishedAt] = nowISO()

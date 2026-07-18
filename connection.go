@@ -49,23 +49,28 @@ type Connection struct {
 	recvCh   chan map[string]any
 	stopOnce sync.Once
 	stopCh   chan struct{}
+
+	heartbeatStop chan struct{}
+	heartbeatOnce sync.Once
 }
 
 func newConnection(transport Transport, apiKey, serviceName string, opts *ConnectOptions) *Connection {
 	c := &Connection{
-		transport:      transport,
-		apiKey:         apiKey,
-		serviceName:    serviceName,
-		graphqlURL:     opts.GraphQLURL,
-		debug:          opts.Debug,
-		logger:         opts.Logger,
-		maxInFlight:    opts.MaxInFlight,
-		requestTimeout: opts.RequestTimeout,
-		isConnected:    true,
-		recvCh:         make(chan map[string]any, 256),
-		stopCh:         make(chan struct{}),
+		transport:     transport,
+		apiKey:        apiKey,
+		serviceName:   serviceName,
+		graphqlURL:    opts.GraphQLURL,
+		debug:         opts.Debug,
+		logger:        opts.Logger,
+		maxInFlight:   opts.MaxInFlight,
+    requestTimeout: opts.RequestTimeout,
+		isConnected:   true,
+		recvCh:        make(chan map[string]any, 256),
+		stopCh:        make(chan struct{}),
+		heartbeatStop: make(chan struct{}),
 	}
 	go c.readLoop()
+	go c.heartbeatLoop()
 	return c
 }
 
@@ -316,14 +321,13 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 		msg[FieldThreadToken] = cfg.token
 		c.logger.Debug("Joining thread with token", "token_preview", cfg.token[:min(20, len(cfg.token))])
 	case cfg.threadID != "":
-		if cfg.role == "" {
-			return nil, fmt.Errorf("role is required when joining by thread ID")
-		}
 		msg[FieldThreadID] = cfg.threadID
-		msg[FieldRole] = cfg.role
+		if cfg.role != "" {
+			msg[FieldRole] = cfg.role
+		}
 		c.logger.Debug("Joining thread directly", "threadID", cfg.threadID, "role", cfg.role)
 	default:
-		return nil, fmt.Errorf("either WithJoinToken or WithJoinThreadID+WithJoinRole must be provided")
+		return nil, fmt.Errorf("either WithJoinToken or WithJoinThreadID must be provided")
 	}
 
 	resp, err := c.request(ctx, msg, func(m map[string]any) bool {
@@ -348,6 +352,9 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 func (c *Connection) Close() error {
 	c.stopOnce.Do(func() {
 		close(c.stopCh)
+	})
+	c.heartbeatOnce.Do(func() {
+		close(c.heartbeatStop)
 	})
 
 	c.mu.Lock()
@@ -553,6 +560,24 @@ func (c *Connection) triggerHandlers(eventPattern string, notif *Notification) {
 				}()
 				h(notif)
 			}()
+		}
+	}
+}
+
+func (c *Connection) heartbeatLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.heartbeatStop:
+			return
+		case <-ticker.C:
+			c.mu.Lock()
+			connected := c.isConnected
+			c.mu.Unlock()
+			if connected {
+				_ = c.send(map[string]any{FieldAction: ActionHeartbeat})
+			}
 		}
 	}
 }

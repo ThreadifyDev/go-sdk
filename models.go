@@ -58,6 +58,7 @@ const (
 	ActionNotification      = "notification"
 	ActionNotificationBatch = "notification_batch"
 	ActionAckNotification   = "ack_notification"
+	ActionHeartbeat         = "heartbeat"
 
 	// Fields
 	FieldAction            = "action"
