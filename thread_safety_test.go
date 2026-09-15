@@ -30,7 +30,7 @@ func TestThreadInstance_NilSafety(t *testing.T) {
 	})
 
 	t.Run("WaitFor on nil thread", func(t *testing.T) {
-		_, err := thread.WaitFor(ctx, "some_step", nil)
+		_, err := thread.WaitForNotification(ctx, "some_step", nil)
 		if err == nil {
 			t.Error("expected error when calling WaitFor on nil thread, got nil")
 		}

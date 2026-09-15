@@ -18,8 +18,9 @@ type ThreadInstance struct {
 	Refs        map[string]string
 	Tags        []string // Tags applied at thread creation (immutable)
 
-	steps        sync.Map
-	pendingWaits sync.Map
+	steps            sync.Map
+	pendingWaits     sync.Map
+	invocationGrants sync.Map
 }
 
 type pendingWait struct {
@@ -98,7 +99,7 @@ func (t *ThreadInstance) InviteParty(ctx context.Context, opts InviteOptions) (*
 	}, nil
 }
 
-func (t *ThreadInstance) WaitFor(ctx context.Context, stepName string, opts *WaitOptions) (*Notification, error) {
+func (t *ThreadInstance) WaitForNotification(ctx context.Context, stepName string, opts *WaitOptions) (*Notification, error) {
 	if t == nil {
 		return nil, fmt.Errorf("ThreadInstance is nil")
 	}

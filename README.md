@@ -162,7 +162,8 @@ The SDK uses the Functional Option pattern for configuration.
 ### Connection Options
 
 -   `WithServiceName(string)`: Set the service name (default: "default").
--   `WithWSURL(string)`: Set the WebSocket URL.
+-   `WithEngineURL(string)`: Set one HTTP(S) Engine base URL, retaining proxy prefixes.
+-   `WithWSURL(string)`: Set an explicit WebSocket URL for split deployments.
 -   `WithDebug(bool)`: Enable debug logging.
 -   `WithConnectTimeout(time.Duration)`: Set the connection timeout.
 -   `WithMaxInFlight(int)`: Set the maximum number of concurrent requests.
@@ -257,3 +258,57 @@ Alternatively, use the Go command:
 ```bash
 go test -v ./...
 ```
+
+
+## Contract coordination (0.4)
+
+```go
+conn, err := threadify.Connect(ctx, apiKey,
+    threadify.WithEngineURL("https://threadify.example.com"),
+    threadify.WithServiceName("payments"))
+if err != nil { return err }
+defer conn.Close()
+threads, err := conn.GetThreadsByRef(ctx, map[string]string{"order_id": "ORD-1001"},
+    threadify.RefQuery{Status: "active", Limit: 25})
+if err != nil { return err }
+if len(threads) == 0 { return fmt.Errorf("order thread not found") }
+thread, err := conn.Join(ctx, threadify.WithJoinThreadID(threads[0].ID), threadify.WithJoinRole("processor"))
+if err != nil { return err }
+grant, err := thread.WaitFor(ctx, "charge", &threadify.WaitOptions{Timeout: 15 * time.Second})
+if err != nil { return err }
+// Execute the permitted business operation here, or grant.Cancel(ctx) to release it.
+_ = grant
+result, err := thread.Step("charge").AddContext(map[string]any{"amount": 42}).Success(
+    ctx, "charged", threadify.ReportOptions{WaitFor: true, Timeout: 15 * time.Second})
+if err != nil { return err }
+validation, err := thread.WaitForValidation(ctx, "charge", result.StepID, nil)
+```
+
+`WaitFor` now asks the Engine for permission for one invocation. The previous
+notification helper is `WaitForNotification`; a notification is not permission.
+Cancelling a grant closes that invocation; it does not restore consumed fresh
+prerequisites. A fresh-prerequisite contract needs a new successful predecessor
+before another grant. The grant's invocation ID and default idempotency key accompany the next report
+of that step. Synchronous reports return the acknowledged `StepID` and the exact
+validation result. Violations, unavailable validation, duplicate synchronous
+reports, and mismatched responses return errors.
+
+Waits send one correlated request and receive one final response. Cancellation
+and deadlines cancel the server wait; `errors.Is(err, context.Canceled)` and
+`errors.Is(err, context.DeadlineExceeded)` remain usable. Inspect `*RequestError`
+for `Code`, `RequestID`, `InvocationID`, `StepID`, and `IdempotencyKey` when supplied.
+A timeout does not prove an accepted event was rolled back; query or resume
+validation before retrying. Writes are not automatically retried. Default wait
+time is 10 seconds, maximum 5 minutes, bounded by the caller's context. Ordinary
+requests continue to use `WithRequestTimeout`.
+
+The OTEL exporter writes original span and span-event timestamps to the event
+fields and adds `otel_trace_id`/`otel_span_id` refs. `SpanExporterOptions.RefsMap`
+renames selected attributes into refs; `Refs` still copies named attributes.
+`ThreadStep.RecordedTimes(start, end)` also supports delayed direct events.
+
+CI runs race tests for both the root and OTEL modules. Release tags must match
+`VERSION`: `v0.4.0` for the root module and `otel/v0.4.0` for the separate OTEL
+module. Both use the existing release workflow; ordinary branch pushes do not
+publish releases. Before tagging, update the OTEL module's root dependency to the
+published root version; local tests use its existing `replace` directive.

@@ -24,6 +24,7 @@ type SpanExporter struct {
 
 type SpanExporterOptions struct {
 	Refs    []string
+	RefsMap map[string]string
 	Filters []string
 }
 
@@ -78,7 +79,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 	step := thread.Step(stepName)
 
 	contextData := make(map[string]any)
-	refs := make(map[string]string)
+	refs := map[string]string{"otel_trace_id": span.SpanContext().TraceID().String(), "otel_span_id": span.SpanContext().SpanID().String()}
 
 	refKeys := refKeySet(e.options.Refs)
 	skipKeys := map[string]bool{
@@ -97,8 +98,11 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 			continue
 		}
 
-		if refKeys[key] || hasPrefix(key, "threadify.ref.") {
+		if refKeys[key] || e.options.RefsMap[key] != "" || hasPrefix(key, "threadify.ref.") {
 			refKey := key
+			if mapped := e.options.RefsMap[key]; mapped != "" {
+				refKey = mapped
+			}
 			if hasPrefix(key, "threadify.ref.") {
 				refKey = key[len("threadify.ref."):]
 			}
@@ -110,13 +114,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		}
 	}
 
-	// Add times to context since there is no direct timestamp injection in exported API
-	if !span.StartTime().IsZero() {
-		contextData["otel.start_time"] = span.StartTime().UTC().Format(time.RFC3339Nano)
-	}
-	if !span.EndTime().IsZero() {
-		contextData["otel.end_time"] = span.EndTime().UTC().Format(time.RFC3339Nano)
-	}
+	step.RecordedTimes(span.StartTime(), span.EndTime())
 
 	if len(contextData) > 0 {
 		step.AddContext(contextData)
@@ -132,7 +130,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		for _, attr := range evt.Attributes {
 			payload[string(attr.Key)] = attrValueToAny(attr.Value)
 		}
-		step.SubStep(evt.Name, payload)
+		step.SubStepAt(evt.Name, payload, evt.Time)
 	}
 
 	statusCode := span.Status().Code
@@ -158,6 +156,9 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		_, resultErr = step.Failed(ctx, message)
 	}
 
+	if resultErr != nil {
+		return resultErr
+	}
 	parentSpanID := span.Parent().SpanID()
 	if !parentSpanID.IsValid() {
 		if targetStatus == "success" {
@@ -223,6 +224,9 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 	serviceName := attrString(span.Attributes(), "threadify.service")
 
 	opts := []threadify.StartOption{}
+	if role := attrString(span.Attributes(), "threadify.role"); role != "" {
+		opts = append(opts, threadify.WithRole(role))
+	}
 	if serviceName != "" {
 		opts = append(opts, threadify.WithService(serviceName))
 	}

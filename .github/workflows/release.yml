@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'otel/v*'
   workflow_dispatch:
 
 jobs:
@@ -19,11 +20,20 @@ jobs:
           cache-dependency-path: |
             go.sum
             otel/go.sum
+      - name: Verify release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            expected="v$(tr -d '\r\n' < VERSION)"
+            test "$RELEASE_TAG" = "$expected" || test "$RELEASE_TAG" = "otel/$expected"
+          fi
       - name: Run Tests
-        run: go test ./...
+        run: go test -race ./...
       - name: Run OTEL Module Tests
         working-directory: otel
-        run: go test ./...
+        run: go test -race ./...
 
   github-release:
     name: Publish GitHub Release
@@ -31,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v6
       - name: Create Release

@@ -30,7 +30,7 @@ func TestThreadInstance_WaitFor_SuccessNotification(t *testing.T) {
 		thread.handleNotification(notif)
 	}()
 
-	notif, err := thread.WaitFor(ctx, "order_placed", nil)
+	notif, err := thread.WaitForNotification(ctx, "order_placed", nil)
 	if err != nil {
 		t.Fatalf("WaitFor() error: %v", err)
 	}

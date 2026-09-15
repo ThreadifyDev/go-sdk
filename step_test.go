@@ -688,7 +688,7 @@ func TestThreadInstance_WaitFor_Timeout(t *testing.T) {
 	ctx := context.Background()
 	thread, _ := conn.Start(ctx, "")
 
-	_, err := thread.WaitFor(ctx, "some_step", &WaitOptions{
+	_, err := thread.WaitForNotification(ctx, "some_step", &WaitOptions{
 		Timeout: 100 * time.Millisecond,
 	})
 	if err == nil {
@@ -709,7 +709,7 @@ func TestThreadInstance_WaitFor_EmptyStepName(t *testing.T) {
 	ctx := context.Background()
 	thread, _ := conn.Start(ctx, "")
 
-	_, err := thread.WaitFor(ctx, "", nil)
+	_, err := thread.WaitForNotification(ctx, "", nil)
 	if err == nil {
 		t.Error("expected error for empty step name")
 	}

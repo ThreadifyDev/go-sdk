@@ -165,7 +165,7 @@ func (g *GraphQLClient) query(ctx context.Context, gqlQuery string, variables ma
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GraphQL request failed: %d %s", resp.StatusCode, string(respBody))
+		return nil, httpRequestError(resp.StatusCode, fmt.Sprintf("GraphQL request failed: %d %s", resp.StatusCode, string(respBody)))
 	}
 
 	var result struct {
@@ -222,7 +222,11 @@ func (d *DataRetriever) GetThread(ctx context.Context, threadID string) (*Archiv
 	return newArchivedThread(threadData, d.client), nil
 }
 
-func (d *DataRetriever) GetThreadsByRef(ctx context.Context, q *RefQuery) ([]*ArchivedThread, error) {
+func (d *DataRetriever) GetThreadsByRef(ctx context.Context, refs any, filters ...RefQuery) ([]*ArchivedThread, error) {
+	q, err := referenceQuery(refs, filters...)
+	if err != nil {
+		return nil, err
+	}
 	query := fmt.Sprintf(`
 		query GetThreadsByRef(
 			$refKey: String!

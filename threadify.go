@@ -9,6 +9,8 @@ import (
 
 type Option func(*ConnectOptions)
 
+func WithEngineURL(url string) Option { return func(o *ConnectOptions) { o.EngineURL = url } }
+
 func WithServiceName(name string) Option {
 	return func(o *ConnectOptions) {
 		o.ServiceName = name
@@ -76,12 +78,8 @@ func Connect(ctx context.Context, apiKey string, opts ...Option) (*Connection, e
 		return nil, err
 	}
 
-	o := (&ConnectOptions{}).withDefaults()
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	if err := o.validate(); err != nil {
+	o, err := resolveConnectOptions(opts)
+	if err != nil {
 		return nil, err
 	}
 
@@ -149,6 +147,7 @@ func Create(config *Config) *Factory {
 
 // Config holds static configuration for the Connection Factory.
 type Config struct {
+	EngineURL      string
 	APIKey         string
 	ServiceName    string
 	WSURL          string
@@ -170,6 +169,9 @@ func (f *Factory) connectOptions() []Option {
 	opts := []Option{
 		WithDebug(f.config.Debug),
 	}
+	if f.config.EngineURL != "" {
+		opts = append(opts, WithEngineURL(f.config.EngineURL))
+	}
 	if f.config.ServiceName != "" {
 		opts = append(opts, WithServiceName(f.config.ServiceName))
 	}
@@ -183,4 +185,28 @@ func (f *Factory) connectOptions() []Option {
 		opts = append(opts, WithRequestTimeout(f.config.RequestTimeout))
 	}
 	return opts
+}
+
+func resolveConnectOptions(opts []Option) (ConnectOptions, error) {
+	o := ConnectOptions{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	if o.EngineURL != "" {
+		if o.WSURL != "" || o.GraphQLURL != "" {
+			return ConnectOptions{}, fmt.Errorf("use EngineURL without separate transport URLs")
+		}
+		ws, gql, err := engineEndpoints(o.EngineURL)
+		if err != nil {
+			return ConnectOptions{}, err
+		}
+		o.WSURL, o.GraphQLURL = ws, gql
+	}
+	o = o.withDefaults()
+	if err := o.validate(); err != nil {
+		return ConnectOptions{}, err
+	}
+
+	return o, nil
 }

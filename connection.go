@@ -46,9 +46,10 @@ type Connection struct {
 	dataRetriever     *DataRetriever
 	dataRetrieverOnce sync.Once
 
-	recvCh   chan map[string]any
-	stopOnce sync.Once
-	stopCh   chan struct{}
+	pendingRequests sync.Map
+	recvCh          chan map[string]any
+	stopOnce        sync.Once
+	stopCh          chan struct{}
 
 	heartbeatStop chan struct{}
 	heartbeatOnce sync.Once
@@ -79,6 +80,8 @@ func (c *Connection) readLoop() {
 		c.mu.Lock()
 		c.isConnected = false
 		c.mu.Unlock()
+		c.stopOnce.Do(func() { close(c.stopCh) })
+		c.heartbeatOnce.Do(func() { close(c.heartbeatStop) })
 	}()
 
 	for {
@@ -108,6 +111,15 @@ func (c *Connection) readLoop() {
 				}
 			}
 		default:
+			if id := asString(msg["requestId"]); id != "" {
+				if pending, ok := c.pendingRequests.Load(id); ok {
+					select {
+					case pending.(chan map[string]any) <- msg:
+					default:
+					}
+				}
+				continue
+			}
 			select {
 			case c.recvCh <- msg:
 			default:
@@ -122,6 +134,8 @@ func (c *Connection) waitResponse(ctx context.Context, match func(map[string]any
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-c.stopCh:
+			return nil, fmt.Errorf("threadify connection closed; operation outcome may be unknown")
 		case msg, ok := <-c.recvCh:
 			if !ok {
 				return nil, fmt.Errorf("connection closed")
@@ -158,6 +172,11 @@ func (c *Connection) sendWithContext(ctx context.Context, msg map[string]any) er
 
 	if !connected {
 		return fmt.Errorf("WebSocket is not connected")
+	}
+	if transport, ok := c.transport.(interface {
+		SendContext(context.Context, map[string]any) error
+	}); ok {
+		return transport.SendContext(ctx, msg)
 	}
 	return c.transport.Send(msg)
 }
@@ -622,12 +641,12 @@ func (c *Connection) GetThread(ctx context.Context, threadID string) (*ArchivedT
 	return dr.GetThread(ctx, threadID)
 }
 
-func (c *Connection) GetThreadsByRef(ctx context.Context, query *RefQuery) ([]*ArchivedThread, error) {
+func (c *Connection) GetThreadsByRef(ctx context.Context, query any, filters ...RefQuery) ([]*ArchivedThread, error) {
 	dr, err := c.getDataRetriever()
 	if err != nil {
 		return nil, err
 	}
-	return dr.GetThreadsByRef(ctx, query)
+	return dr.GetThreadsByRef(ctx, query, filters...)
 }
 
 func (c *Connection) GetThreadChain(ctx context.Context, rootID string, maxDepth int) ([]*ArchivedThread, error) {
