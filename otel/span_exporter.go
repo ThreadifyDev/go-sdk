@@ -18,14 +18,18 @@ type SpanExporter struct {
 	conn    *threadify.Connection
 	options SpanExporterOptions
 
-	mu             sync.Mutex
-	traceThreadMap map[string]*threadify.ThreadInstance
+	startMu         sync.Mutex
+	mu              sync.Mutex
+	traceThreadMap  map[string]*threadify.ThreadInstance
+	traceReferences map[string]string
 }
 
 type SpanExporterOptions struct {
-	Refs    []string
-	RefsMap map[string]string
-	Filters []string
+	// UseWorkflowRunID defaults to true when nil; explicit references always take precedence.
+	UseWorkflowRunID *bool
+	Refs             []string
+	RefsMap          map[string]string
+	Filters          []string
 }
 
 // NewSpanExporter creates a new OpenTelemetry exporter for Threadify.
@@ -37,9 +41,10 @@ func NewSpanExporter(conn *threadify.Connection, opts SpanExporterOptions) *Span
 		opts.Filters = []string{}
 	}
 	return &SpanExporter{
-		conn:           conn,
-		options:        opts,
-		traceThreadMap: make(map[string]*threadify.ThreadInstance),
+		conn:            conn,
+		options:         opts,
+		traceThreadMap:  make(map[string]*threadify.ThreadInstance),
+		traceReferences: make(map[string]string),
 	}
 }
 
@@ -76,20 +81,30 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		stepName = span.Name()
 	}
 
-	step := thread.Step(stepName)
+	step := thread.Step(stepName).IdempotencyKey("otel:" + span.SpanContext().TraceID().String() + ":" + span.SpanContext().SpanID().String())
 
 	contextData := make(map[string]any)
 	refs := map[string]string{"otel_trace_id": span.SpanContext().TraceID().String(), "otel_span_id": span.SpanContext().SpanID().String()}
 
+	externalRef, err := e.externalRef(span)
+	if err != nil {
+		return err
+	}
+	if externalRef != "" {
+		delete(refs, "otel_trace_id")
+	}
+	contextData["otel.trace_id"] = span.SpanContext().TraceID().String()
+	contextData["otel.span_id"] = span.SpanContext().SpanID().String()
 	refKeys := refKeySet(e.options.Refs)
 	skipKeys := map[string]bool{
-		"threadify.thread_id": true,
-		"threadify.contract":  true,
-		"threadify.label":     true,
-		"threadify.step_name": true,
-		"threadify.role":      true,
-		"threadify.service":   true,
-		"threadify.tags":      true,
+		"threadify.external_ref": true,
+		"threadify.thread_id":    true,
+		"threadify.contract":     true,
+		"threadify.label":        true,
+		"threadify.step_name":    true,
+		"threadify.role":         true,
+		"threadify.service":      true,
+		"threadify.tags":         true,
 	}
 
 	for _, attr := range span.Attributes() {
@@ -106,7 +121,9 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 			if hasPrefix(key, "threadify.ref.") {
 				refKey = key[len("threadify.ref."):]
 			}
-			refs[refKey] = attrValueToString(attr.Value)
+			if refKey != "threadify.external_ref" {
+				refs[refKey] = attrValueToString(attr.Value)
+			}
 		} else if hasPrefix(key, "threadify.context.") {
 			contextData[key[len("threadify.context."):]] = attrValueToAny(attr.Value)
 		} else {
@@ -160,7 +177,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		return resultErr
 	}
 	parentSpanID := span.Parent().SpanID()
-	if !parentSpanID.IsValid() {
+	if (!parentSpanID.IsValid() && externalRef == "") || (externalRef != "" && attrBool(span.Attributes(), "threadify.run.complete")) {
 		if targetStatus == "success" {
 			_, _ = thread.Complete(ctx, "Root span completed successfully")
 		} else {
@@ -175,7 +192,38 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 }
 
 func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadOnlySpan) (*threadify.ThreadInstance, error) {
+	e.startMu.Lock()
+	defer e.startMu.Unlock()
 	traceID := span.SpanContext().TraceID().String()
+	externalRef, err := e.externalRef(span)
+	if err != nil {
+		return nil, err
+	}
+	if externalRef != "" {
+		attrs := mergedSpanAttributes(span)
+		label := attrString(attrs, "threadify.label")
+		if label == "" {
+			label = span.Name()
+		}
+		opts := []threadify.StartOption{threadify.WithRefs(map[string]any{"threadify.external_ref": externalRef, "otel_trace_id": traceID})}
+		if c := attrString(attrs, "threadify.contract"); c != "" {
+			opts = append(opts, threadify.WithContract(c))
+		}
+		if role := attrString(attrs, "threadify.role"); role != "" {
+			opts = append(opts, threadify.WithRole(role))
+		}
+		if service := attrString(attrs, "threadify.service"); service != "" {
+			opts = append(opts, threadify.WithService(service))
+		}
+		if tags := attrStringSlice(attrs, "threadify.tags"); len(tags) > 0 {
+			opts = append(opts, threadify.WithTags(tags...))
+		}
+		thread, err := e.conn.Start(ctx, label, opts...)
+		if err == nil {
+			e.rememberReference(traceID, externalRef)
+		}
+		return thread, err
+	}
 
 	e.mu.Lock()
 	thread, ok := e.traceThreadMap[traceID]
@@ -185,30 +233,13 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 		return thread, nil
 	}
 
-	existingThreadID := attrString(span.Attributes(), "threadify.thread_id")
+	existingThreadID := attrString(mergedSpanAttributes(span), "threadify.thread_id")
 	if existingThreadID != "" {
 		role := attrString(span.Attributes(), "threadify.role")
 		if role == "" {
 			role = "participant"
 		}
 		thread, err := e.conn.Join(ctx, threadify.WithJoinThreadID(existingThreadID), threadify.WithJoinRole(role))
-		if err != nil {
-			return nil, err
-		}
-		e.cacheThread(traceID, thread)
-		return thread, nil
-	}
-
-	archived, err := e.conn.GetThreadsByRef(ctx, &threadify.RefQuery{
-		RefKey:   "otel_trace_id",
-		RefValue: traceID,
-	})
-	if err == nil && len(archived) > 0 {
-		role := attrString(span.Attributes(), "threadify.role")
-		if role == "" {
-			role = "participant"
-		}
-		thread, err := e.conn.Join(ctx, threadify.WithJoinThreadID(archived[0].ID), threadify.WithJoinRole(role))
 		if err != nil {
 			return nil, err
 		}
@@ -223,7 +254,7 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 	}
 	serviceName := attrString(span.Attributes(), "threadify.service")
 
-	opts := []threadify.StartOption{}
+	opts := []threadify.StartOption{threadify.WithRefs(map[string]any{"otel_trace_id": traceID})}
 	if role := attrString(span.Attributes(), "threadify.role"); role != "" {
 		opts = append(opts, threadify.WithRole(role))
 	}
@@ -348,3 +379,64 @@ func (e *SpanExporter) shouldDrop(name string) bool {
 }
 
 var _ sdktrace.SpanExporter = (*SpanExporter)(nil)
+
+// externalRef resolves caller-controlled identity without treating names as correlation.
+func (e *SpanExporter) externalRef(span sdktrace.ReadOnlySpan) (string, error) {
+	attrs := mergedSpanAttributes(span)
+	if attrString(attrs, "threadify.thread_id") != "" {
+		return "", nil
+	}
+	set := attribute.NewSet(attrs...)
+	keys := []string{"threadify.external_ref"}
+	if e.options.UseWorkflowRunID == nil || *e.options.UseWorkflowRunID {
+		keys = append(keys, "workflow.run_id")
+	}
+	for _, key := range keys {
+		value, ok := set.Value(attribute.Key(key))
+		if !ok {
+			continue
+		}
+		if value.Type() != attribute.STRING {
+			return "", fmt.Errorf("%s must be a string", key)
+		}
+		ref := strings.TrimSpace(value.AsString())
+		if len(ref) > 1024 {
+			return "", fmt.Errorf("%s exceeds 1024 bytes", key)
+		}
+		if ref != "" {
+			return ref, nil
+		}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.traceReferences[span.SpanContext().TraceID().String()], nil
+}
+
+func attrBool(attrs []attribute.KeyValue, key string) bool {
+	for _, attr := range attrs {
+		if string(attr.Key) == key {
+			return attr.Value.Type() == attribute.BOOL && attr.Value.AsBool()
+		}
+	}
+	return false
+}
+
+func (e *SpanExporter) rememberReference(traceID, ref string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, ok := e.traceReferences[traceID]; ok {
+		return
+	}
+	e.traceReferences[traceID] = ref
+	time.AfterFunc(10*time.Minute, func() { e.mu.Lock(); delete(e.traceReferences, traceID); e.mu.Unlock() })
+}
+
+func mergedSpanAttributes(span sdktrace.ReadOnlySpan) []attribute.KeyValue {
+	var attrs []attribute.KeyValue
+	if span.Resource() != nil {
+		attrs = append(attrs, span.Resource().Attributes()...)
+	}
+	attrs = append(attrs, span.Attributes()...)
+	set := attribute.NewSet(attrs...)
+	return set.ToSlice()
+}
