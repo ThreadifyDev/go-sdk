@@ -49,4 +49,7 @@ jobs:
             otel/go.sum
       - name: Run Tests
         working-directory: .
-        run: make coverage
+        run: go test -race -cover ./...
+      - name: Test OTEL module
+        working-directory: otel
+        run: go test -race ./...

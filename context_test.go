@@ -39,7 +39,7 @@ func TestValidateContext(t *testing.T) {
 	})
 }
 
-func TestConnectionStart_ExpiredContextDoesNotSend(t *testing.T) {
+func TestConnectionThread_ExpiredContextDoesNotSend(t *testing.T) {
 	conn, mt := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
 
@@ -47,12 +47,12 @@ func TestConnectionStart_ExpiredContextDoesNotSend(t *testing.T) {
 	defer cancel()
 
 	sentBefore := len(mt.getSent())
-	thread, err := conn.Start(ctx, "expired")
+	thread, err := conn.Thread(ctx, "expired")
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Start() error = %v, want context.DeadlineExceeded", err)
+		t.Fatalf("Thread() error = %v, want context.DeadlineExceeded", err)
 	}
 	if thread != nil {
-		t.Fatalf("Start() thread = %#v, want nil", thread)
+		t.Fatalf("Thread() thread = %#v, want nil", thread)
 	}
 	if sentAfter := len(mt.getSent()); sentAfter != sentBefore {
 		t.Fatalf("sent message count = %d, want %d", sentAfter, sentBefore)
@@ -82,29 +82,29 @@ func TestThreadStep_ExpiredContextDoesNotSend(t *testing.T) {
 	}
 }
 
-func TestConnectionStart_UsesSDKRequestTimeout(t *testing.T) {
+func TestConnectionThread_UsesSDKRequestTimeout(t *testing.T) {
 	conn, mt := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
 	conn.requestTimeout = 20 * time.Millisecond
 
 	sentBefore := len(mt.getSent())
 	startedAt := time.Now()
-	thread, err := conn.Start(context.Background(), "sdk-timeout")
+	thread, err := conn.Thread(context.Background(), "sdk-timeout")
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Start() error = %v, want context.DeadlineExceeded", err)
+		t.Fatalf("Thread() error = %v, want context.DeadlineExceeded", err)
 	}
 	if thread != nil {
-		t.Fatalf("Start() thread = %#v, want nil", thread)
+		t.Fatalf("Thread() thread = %#v, want nil", thread)
 	}
 	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
-		t.Fatalf("Start() elapsed = %v, SDK request timeout was not applied", elapsed)
+		t.Fatalf("Thread() elapsed = %v, SDK request timeout was not applied", elapsed)
 	}
 	if sentAfter := len(mt.getSent()); sentAfter != sentBefore+1 {
 		t.Fatalf("sent message count = %d, want %d", sentAfter, sentBefore+1)
 	}
 }
 
-func TestConnectionStart_RespectsShorterCallerDeadline(t *testing.T) {
+func TestConnectionThread_RespectsShorterCallerDeadline(t *testing.T) {
 	conn, _ := newTestConnection(t)
 	defer func() { _ = conn.Close() }()
 	conn.requestTimeout = time.Second
@@ -113,11 +113,11 @@ func TestConnectionStart_RespectsShorterCallerDeadline(t *testing.T) {
 	defer cancel()
 
 	startedAt := time.Now()
-	_, err := conn.Start(ctx, "caller-timeout")
+	_, err := conn.Thread(ctx, "caller-timeout")
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Start() error = %v, want context.DeadlineExceeded", err)
+		t.Fatalf("Thread() error = %v, want context.DeadlineExceeded", err)
 	}
 	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
-		t.Fatalf("Start() elapsed = %v, caller deadline did not take precedence", elapsed)
+		t.Fatalf("Thread() elapsed = %v, caller deadline did not take precedence", elapsed)
 	}
 }

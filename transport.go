@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -23,11 +24,14 @@ type GorillaDialer struct{}
 
 func (d *GorillaDialer) Dial(ctx context.Context, wsURL string) (Transport, error) {
 	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("websocket dial: %w", err)
-	}
 	if resp != nil && resp.Body != nil {
 		_ = resp.Body.Close()
+	}
+	if err != nil {
+		if resp != nil {
+			return nil, httpRequestError(resp.StatusCode, fmt.Sprintf("Threadify connection rejected: HTTP %d", resp.StatusCode))
+		}
+		return nil, fmt.Errorf("websocket dial: %w", err)
 	}
 	return &GorillaTransport{conn: conn}, nil
 }
@@ -44,6 +48,9 @@ func (t *GorillaTransport) Send(msg map[string]any) error {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if err := t.conn.SetWriteDeadline(time.Time{}); err != nil {
+		return err
+	}
 	return t.conn.WriteMessage(websocket.TextMessage, data)
 }
 
@@ -61,4 +68,22 @@ func (t *GorillaTransport) Recv() (map[string]any, error) {
 
 func (t *GorillaTransport) Close() error {
 	return t.conn.Close()
+}
+
+// SendContext applies the caller's write deadline without blocking future writes.
+func (t *GorillaTransport) SendContext(ctx context.Context, msg map[string]any) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deadline, _ := ctx.Deadline()
+	if err := t.conn.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
+	return t.conn.WriteMessage(websocket.TextMessage, data)
 }

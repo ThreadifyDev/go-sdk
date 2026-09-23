@@ -124,6 +124,7 @@ const (
 )
 
 type ConnectOptions struct {
+	EngineURL      string
 	WSURL          string
 	GraphQLURL     string
 	Debug          bool
@@ -193,12 +194,14 @@ func (l *nopLogger) Warn(_ string, _ ...any)  {}
 func (l *nopLogger) Error(_ string, _ ...any) {}
 
 type StepResult struct {
-	StepName       string `json:"stepName"`
-	ThreadID       string `json:"threadId"`
-	Status         string `json:"status"`
-	IdempotencyKey string `json:"idempotencyKey"`
-	Timestamp      string `json:"timestamp"`
-	Duplicate      bool   `json:"duplicate,omitempty"`
+	StepID         string      `json:"stepId,omitempty"`
+	Validation     *WaitResult `json:"validation,omitempty"`
+	StepName       string      `json:"stepName"`
+	ThreadID       string      `json:"threadId"`
+	Status         string      `json:"status"`
+	IdempotencyKey string      `json:"idempotencyKey"`
+	Timestamp      string      `json:"timestamp"`
+	Duplicate      bool        `json:"duplicate,omitempty"`
 }
 
 type SubStepData struct {
@@ -230,8 +233,9 @@ type ThreadEndResponse struct {
 }
 
 type WaitOptions struct {
-	Timeout  time.Duration
-	Statuses []string
+	InvocationID string
+	Timeout      time.Duration
+	Statuses     []string
 }
 
 type NotificationData struct {

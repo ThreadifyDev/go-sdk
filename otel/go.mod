@@ -3,7 +3,7 @@ module github.com/ThreadifyDev/go-sdk/otel
 go 1.25.0
 
 require (
-	github.com/ThreadifyDev/go-sdk v0.0.0
+	github.com/ThreadifyDev/go-sdk v0.4.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 )

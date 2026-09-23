@@ -26,15 +26,21 @@ func main() {
 
 	fmt.Println("Connected to Threadify!")
 
-	// 2. Start a new thread
-	thread, err := conn.Start(ctx, "", threadify.WithContract("order_processing"))
-	if err != nil {
-		log.Fatalf("Failed to start thread: %v", err)
+	// 2. Create or resume this business process using its existing order ID.
+	orderID := os.Getenv("ORDER_ID")
+	if orderID == "" {
+		log.Fatal("ORDER_ID must identify the order being processed")
 	}
-	fmt.Printf("Thread started: %s\n", thread.ThreadID)
+	thread, err := conn.Thread(ctx, "order:"+orderID, threadify.ThreadOptions{
+		Label: "Order processing", Refs: map[string]string{"orderId": orderID},
+	})
+	if err != nil {
+		log.Fatalf("Failed to resolve thread: %v", err)
+	}
+	fmt.Printf("Thread resolved: %s\n", thread.ThreadID)
 
 	err = thread.AddRefs(ctx, map[string]string{
-		"orderId": "ORD-12345",
+		"orderId": orderID,
 	})
 	if err != nil {
 		log.Fatalf("Failed to add thread refs: %v", err)
@@ -43,7 +49,7 @@ func main() {
 	// 3. Record steps using the fluent API
 	_, err = thread.Step("order_received").
 		AddContext(map[string]any{
-			"orderId": "ORD-12345",
+			"orderId": orderID,
 			"amount":  99.99,
 		}).
 		Success(ctx, "Order recorded successfully")

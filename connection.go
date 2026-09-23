@@ -2,6 +2,7 @@ package threadify
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -46,9 +47,10 @@ type Connection struct {
 	dataRetriever     *DataRetriever
 	dataRetrieverOnce sync.Once
 
-	recvCh   chan map[string]any
-	stopOnce sync.Once
-	stopCh   chan struct{}
+	pendingRequests sync.Map
+	recvCh          chan map[string]any
+	stopOnce        sync.Once
+	stopCh          chan struct{}
 
 	heartbeatStop chan struct{}
 	heartbeatOnce sync.Once
@@ -79,6 +81,8 @@ func (c *Connection) readLoop() {
 		c.mu.Lock()
 		c.isConnected = false
 		c.mu.Unlock()
+		c.stopOnce.Do(func() { close(c.stopCh) })
+		c.heartbeatOnce.Do(func() { close(c.heartbeatStop) })
 	}()
 
 	for {
@@ -108,6 +112,15 @@ func (c *Connection) readLoop() {
 				}
 			}
 		default:
+			if id := asString(msg["requestId"]); id != "" {
+				if pending, ok := c.pendingRequests.Load(id); ok {
+					select {
+					case pending.(chan map[string]any) <- msg:
+					default:
+					}
+				}
+				continue
+			}
 			select {
 			case c.recvCh <- msg:
 			default:
@@ -122,6 +135,8 @@ func (c *Connection) waitResponse(ctx context.Context, match func(map[string]any
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-c.stopCh:
+			return nil, fmt.Errorf("threadify connection closed; operation outcome may be unknown")
 		case msg, ok := <-c.recvCh:
 			if !ok {
 				return nil, fmt.Errorf("connection closed")
@@ -159,6 +174,11 @@ func (c *Connection) sendWithContext(ctx context.Context, msg map[string]any) er
 	if !connected {
 		return fmt.Errorf("WebSocket is not connected")
 	}
+	if transport, ok := c.transport.(interface {
+		SendContext(context.Context, map[string]any) error
+	}); ok {
+		return transport.SendContext(ctx, msg)
+	}
 	return c.transport.Send(msg)
 }
 
@@ -181,6 +201,8 @@ func (c *Connection) IsConnected() bool {
 	return c.isConnected
 }
 
+// Start creates a thread using the legacy creation API.
+// Deprecated: use Thread with a stable application threadKey to create or resume.
 func (c *Connection) Start(ctx context.Context, label string, args ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected. Call Connect() first")
@@ -239,6 +261,10 @@ func (c *Connection) Start(ctx context.Context, label string, args ...StartOptio
 	threadID := asString(resp[FieldThreadID])
 	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), mapStringValues(cfg.refs))
 	thread.Tags = cfg.tags
+	thread.ContractName = cfg.contractName
+	// Trace-only exporter resolutions may resume an existing contracted thread.
+	// Preserve the Engine's stored metadata even when no contract was supplied.
+	applyThreadMetadata(thread, resp)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
 	return thread, nil
@@ -344,6 +370,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 	threadID := asString(resp[FieldThreadID])
 	threadRole := asString(resp[FieldRole])
 	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), mapStringValues(asMap(resp[FieldRefs])))
+	applyThreadMetadata(thread, resp)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Joined thread", "threadID", threadID, "role", threadRole)
 	return thread, nil
@@ -622,12 +649,12 @@ func (c *Connection) GetThread(ctx context.Context, threadID string) (*ArchivedT
 	return dr.GetThread(ctx, threadID)
 }
 
-func (c *Connection) GetThreadsByRef(ctx context.Context, query *RefQuery) ([]*ArchivedThread, error) {
+func (c *Connection) GetThreadsByRef(ctx context.Context, query any, filters ...RefQuery) ([]*ArchivedThread, error) {
 	dr, err := c.getDataRetriever()
 	if err != nil {
 		return nil, err
 	}
-	return dr.GetThreadsByRef(ctx, query)
+	return dr.GetThreadsByRef(ctx, query, filters...)
 }
 
 func (c *Connection) GetThreadChain(ctx context.Context, rootID string, maxDepth int) ([]*ArchivedThread, error) {
@@ -697,4 +724,45 @@ func sameElements(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// applyThreadMetadata overlays only fields actually supplied by the Engine.
+func applyThreadMetadata(thread *ThreadInstance, response map[string]any) {
+	raw, err := json.Marshal(response)
+	if err != nil {
+		return
+	}
+	var fields struct {
+		ThreadKey       *string           `json:"threadKey"`
+		Label           *string           `json:"label"`
+		ContractID      *string           `json:"contractId"`
+		ContractName    *string           `json:"contractName"`
+		ContractVersion *int              `json:"contractVersion"`
+		Refs            map[string]string `json:"refs"`
+		Tags            []string          `json:"tags"`
+	}
+	if json.Unmarshal(raw, &fields) != nil {
+		return
+	}
+	if fields.ThreadKey != nil {
+		thread.ThreadKey = *fields.ThreadKey
+	}
+	if fields.Label != nil {
+		thread.Label = *fields.Label
+	}
+	if fields.ContractID != nil {
+		thread.ContractID = *fields.ContractID
+	}
+	if fields.ContractName != nil {
+		thread.ContractName = *fields.ContractName
+	}
+	if fields.ContractVersion != nil {
+		thread.ContractVersion = *fields.ContractVersion
+	}
+	if fields.Refs != nil {
+		thread.Refs = fields.Refs
+	}
+	if fields.Tags != nil {
+		thread.Tags = fields.Tags
+	}
 }

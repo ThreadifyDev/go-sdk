@@ -3,10 +3,12 @@ package threadify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
+	"time"
 )
 
 type ThreadStep struct {
@@ -20,6 +22,7 @@ type ThreadStep struct {
 	context              map[string]string
 	metadata             map[string]any
 	err                  error
+	reportOptions        ReportOptions
 }
 
 func newThreadStep(stepName string, thread *ThreadInstance, serviceName string) *ThreadStep {
@@ -118,37 +121,19 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		return nil, s.err
 	}
 
-	s.event[FieldFinishedAt] = nowISO()
-	s.event[FieldStatus] = status
-	s.event[FieldContext] = s.context
-
-	if len(messageOrData) > 0 {
-		s.handleStopMetadata(messageOrData[0])
+	if err := s.prepareReport(status, messageOrData...); err != nil {
+		return nil, err
 	}
-
-	if s.metadata != nil {
-		s.event[FieldMetadata] = s.metadata
-	}
-
-	if len(s.subSteps) > 0 {
-		subStepMaps := make([]map[string]any, len(s.subSteps))
-		for i, ss := range s.subSteps {
-			subStepMaps[i] = map[string]any{
-				FieldName:       ss.Name,
-				FieldStatus:     ss.Status,
-				FieldPayload:    ss.Payload,
-				FieldRecordedAt: ss.RecordedAt,
-			}
-		}
-		s.event[FieldSubSteps] = subStepMaps
-	}
-
-	s.event[FieldIdempotencyKey] = s.generateIdempotencyKey()
 
 	result, err := s.sendEvent(ctx)
 	if err != nil {
+		var requestErr *RequestError
+		if errors.As(err, &requestErr) {
+			requestErr.IdempotencyKey = asString(s.event[FieldIdempotencyKey])
+			requestErr.InvocationID = asString(s.event["invocationId"])
+		}
 		// Check for duplicate.
-		if isDup, ok := err.(*duplicateError); ok {
+		if isDup, ok := err.(*duplicateError); ok && !s.reportOptions.WaitFor {
 			return &StepResult{
 				StepName:       s.stepName,
 				ThreadID:       s.thread.ThreadID,
@@ -160,9 +145,21 @@ func (s *ThreadStep) stop(ctx context.Context, status string, messageOrData ...a
 		}
 		return nil, err
 	}
-	_ = result
+	var validation *WaitResult
+	if s.reportOptions.WaitFor {
+		id := asString(result[FieldStepID])
+		if id == "" {
+			return nil, &RequestError{Code: CodeInvalidWaitResponse, Message: "Engine did not return an event ID"}
+		}
+		validation, err = checkedValidation(asMap(result["validation"]), id)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &StepResult{
+		StepID:         asString(result[FieldStepID]),
+		Validation:     validation,
 		StepName:       s.stepName,
 		ThreadID:       s.thread.ThreadID,
 		Status:         status,
@@ -184,12 +181,32 @@ func IsDuplicateError(err error) bool {
 
 func (s *ThreadStep) sendEvent(ctx context.Context) (map[string]any, error) {
 	if s.thread.ThreadID == "" {
-		return nil, fmt.Errorf("thread not started")
+		return nil, fmt.Errorf("thread has not been resolved")
 	}
 
-	resp, err := s.thread.conn.request(ctx, s.event, func(m map[string]any) bool {
-		return asString(m[FieldAction]) == ActionRecordThreadEvent
-	})
+	var resp map[string]any
+	var err error
+	if s.reportOptions.WaitFor || asString(s.event["invocationId"]) != "" {
+		timeout, timeoutErr := waitTimeout(s.reportOptions.Timeout)
+		if timeoutErr != nil {
+			return nil, timeoutErr
+		}
+		event := make(map[string]any, len(s.event)+2)
+		for k, v := range s.event {
+			event[k] = v
+		}
+		if s.reportOptions.WaitFor {
+			event["waitFor"] = true
+			event["timeoutMs"] = int((timeout + time.Millisecond - 1) / time.Millisecond)
+		}
+		resp, err = s.thread.conn.correlatedRequest(ctx, event, timeout)
+		var reqErr *RequestError
+		if errors.As(err, &reqErr) && asBool(reqErr.Response[FieldIsDuplicate]) && !s.reportOptions.WaitFor {
+			return nil, &duplicateError{Message: reqErr.Message}
+		}
+	} else {
+		resp, err = s.thread.conn.request(ctx, s.event, func(m map[string]any) bool { return asString(m[FieldAction]) == ActionRecordThreadEvent })
+	}
 	if err != nil {
 		return nil, fmt.Errorf("record step: %w", err)
 	}
@@ -287,4 +304,77 @@ func (s *ThreadStep) handleStopMetadata(v any) {
 			}
 		}
 	}
+}
+
+// RecordedTimes preserves source timestamps, including delayed OpenTelemetry spans.
+func (s *ThreadStep) RecordedTimes(start, end time.Time) *ThreadStep {
+	if !start.IsZero() {
+		s.event[FieldStartedAt] = start.UTC().Format(time.RFC3339Nano)
+	}
+	if !end.IsZero() {
+		s.event[FieldFinishedAt] = end.UTC().Format(time.RFC3339Nano)
+	}
+	return s
+}
+
+// SubStepAt records a span event at its original timestamp.
+func (s *ThreadStep) SubStepAt(name string, data map[string]any, at time.Time) *ThreadStep {
+	previous := len(s.subSteps)
+	s.SubStep(name, data)
+	if len(s.subSteps) > previous && !at.IsZero() {
+		s.subSteps[previous].RecordedAt = at.UTC().Format(time.RFC3339Nano)
+	}
+	return s
+}
+
+func (s *ThreadStep) prepareReport(status string, messageOrData ...any) error {
+	if asString(s.event[FieldFinishedAt]) == "" {
+		s.event[FieldFinishedAt] = nowISO()
+	}
+	s.event[FieldStatus] = status
+	s.event[FieldContext] = s.context
+
+	for _, value := range messageOrData {
+		if options, ok := value.(ReportOptions); ok {
+			s.reportOptions = options
+		} else {
+			s.handleStopMetadata(value)
+		}
+	}
+	if s.reportOptions.WaitFor {
+		if _, err := waitTimeout(s.reportOptions.Timeout); err != nil {
+			return err
+		}
+	}
+
+	if s.metadata != nil {
+		s.event[FieldMetadata] = s.metadata
+	}
+
+	if len(s.subSteps) > 0 {
+		subStepMaps := make([]map[string]any, len(s.subSteps))
+		for i, ss := range s.subSteps {
+			subStepMaps[i] = map[string]any{
+				FieldName:       ss.Name,
+				FieldStatus:     ss.Status,
+				FieldPayload:    ss.Payload,
+				FieldRecordedAt: ss.RecordedAt,
+			}
+		}
+		s.event[FieldSubSteps] = subStepMaps
+	}
+
+	if value, ok := s.thread.runtime().invocationGrants.LoadAndDelete(s.stepName); ok {
+		grant := value.(*PermissionGrant)
+		if current := asString(s.event["invocationId"]); current != "" && current != grant.InvocationID {
+			return fmt.Errorf("invocation does not match the claimed step")
+		}
+		s.event["invocationId"] = grant.InvocationID
+		if s.manualIdempotencyKey == "" {
+			s.manualIdempotencyKey = grant.InvocationID
+		}
+	}
+	s.event[FieldIdempotencyKey] = s.generateIdempotencyKey()
+
+	return nil
 }

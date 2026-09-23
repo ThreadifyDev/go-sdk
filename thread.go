@@ -10,16 +10,29 @@ import (
 )
 
 type ThreadInstance struct {
-	conn        *Connection
-	ThreadID    string
-	ContractID  string
-	Role        string
-	AccessLevel string
-	Refs        map[string]string
-	Tags        []string // Tags applied at thread creation (immutable)
+	conn            *Connection
+	ThreadID        string
+	ThreadKey       string
+	Label           string
+	ContractName    string
+	ContractVersion int
+	shared          *ThreadInstance
+	ContractID      string
+	Role            string
+	AccessLevel     string
+	Refs            map[string]string
+	Tags            []string // Tags applied at thread creation (immutable)
 
-	steps        sync.Map
-	pendingWaits sync.Map
+	steps            sync.Map
+	pendingWaits     sync.Map
+	invocationGrants sync.Map
+}
+
+func (t *ThreadInstance) runtime() *ThreadInstance {
+	if t.shared != nil {
+		return t.shared
+	}
+	return t
 }
 
 type pendingWait struct {
@@ -49,7 +62,7 @@ func (t *ThreadInstance) Step(stepName string) *ThreadStep {
 		step.err = fmt.Errorf("stepName cannot be empty")
 	}
 
-	t.steps.Store(stepName, step)
+	t.runtime().steps.Store(stepName, step)
 	return step
 }
 
@@ -98,7 +111,7 @@ func (t *ThreadInstance) InviteParty(ctx context.Context, opts InviteOptions) (*
 	}, nil
 }
 
-func (t *ThreadInstance) WaitFor(ctx context.Context, stepName string, opts *WaitOptions) (*Notification, error) {
+func (t *ThreadInstance) WaitForNotification(ctx context.Context, stepName string, opts *WaitOptions) (*Notification, error) {
 	if t == nil {
 		return nil, fmt.Errorf("ThreadInstance is nil")
 	}
@@ -126,16 +139,16 @@ func (t *ThreadInstance) WaitFor(ctx context.Context, stepName string, opts *Wai
 		cancel:   cancel,
 		statuses: statuses,
 	}
-	t.pendingWaits.Store(stepName, pw)
+	t.runtime().pendingWaits.Store(stepName, pw)
 
 	select {
 	case <-waitCtx.Done():
 		cancel()
-		t.pendingWaits.Delete(stepName)
+		t.runtime().pendingWaits.Delete(stepName)
 		return nil, fmt.Errorf("timeout waiting for step: %s (%v)", stepName, timeout)
 	case notif := <-ch:
 		cancel()
-		t.pendingWaits.Delete(stepName)
+		t.runtime().pendingWaits.Delete(stepName)
 		return notif, nil
 	}
 }
@@ -266,7 +279,7 @@ func (t *ThreadInstance) endThread(ctx context.Context, status, reason string) (
 }
 
 func (t *ThreadInstance) handleNotification(notif *Notification) {
-	val, ok := t.pendingWaits.Load(notif.StepName)
+	val, ok := t.runtime().pendingWaits.Load(notif.StepName)
 	if !ok {
 		return
 	}
@@ -295,10 +308,10 @@ func (t *ThreadInstance) handleNotification(notif *Notification) {
 }
 
 func (t *ThreadInstance) cleanup() {
-	t.pendingWaits.Range(func(key, value any) bool {
+	t.runtime().pendingWaits.Range(func(key, value any) bool {
 		pw := value.(*pendingWait)
 		pw.cancel()
-		t.pendingWaits.Delete(key)
+		t.runtime().pendingWaits.Delete(key)
 		return true
 	})
 	t.conn.threads.Delete(t.ThreadID)
