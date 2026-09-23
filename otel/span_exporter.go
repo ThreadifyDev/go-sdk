@@ -25,7 +25,7 @@ type SpanExporter struct {
 }
 
 type SpanExporterOptions struct {
-	// UseWorkflowRunID defaults to true when nil; explicit references always take precedence.
+	// UseWorkflowRunID defaults to true when nil; explicit threadKey attributes take precedence.
 	UseWorkflowRunID *bool
 	Refs             []string
 	RefsMap          map[string]string
@@ -54,11 +54,17 @@ func (e *SpanExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnl
 		return fmt.Errorf("threadify connection is not open")
 	}
 
+	completions := make(map[string]func() error)
 	for _, span := range spans {
 		if e.shouldDrop(span.Name()) {
 			continue
 		}
-		if err := e.processSpan(ctx, span); err != nil {
+		if err := e.processSpan(ctx, span, completions); err != nil {
+			return err
+		}
+	}
+	for _, complete := range completions {
+		if err := complete(); err != nil {
 			return err
 		}
 	}
@@ -70,8 +76,8 @@ func (e *SpanExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySpan) error {
-	thread, err := e.getOrStartThread(ctx, span)
+func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySpan, completions map[string]func() error) error {
+	thread, err := e.resolveThread(ctx, span)
 	if err != nil {
 		return err
 	}
@@ -86,25 +92,25 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 	contextData := make(map[string]any)
 	refs := map[string]string{"otel_trace_id": span.SpanContext().TraceID().String(), "otel_span_id": span.SpanContext().SpanID().String()}
 
-	externalRef, err := e.externalRef(span)
+	threadKey, err := e.threadKey(span)
 	if err != nil {
 		return err
 	}
-	if externalRef != "" {
+	if threadKey != "" {
 		delete(refs, "otel_trace_id")
 	}
 	contextData["otel.trace_id"] = span.SpanContext().TraceID().String()
 	contextData["otel.span_id"] = span.SpanContext().SpanID().String()
 	refKeys := refKeySet(e.options.Refs)
 	skipKeys := map[string]bool{
-		"threadify.external_ref": true,
-		"threadify.thread_id":    true,
-		"threadify.contract":     true,
-		"threadify.label":        true,
-		"threadify.step_name":    true,
-		"threadify.role":         true,
-		"threadify.service":      true,
-		"threadify.tags":         true,
+		"threadify.thread_key": true,
+		"threadify.thread_id":  true,
+		"threadify.contract":   true,
+		"threadify.label":      true,
+		"threadify.step_name":  true,
+		"threadify.role":       true,
+		"threadify.service":    true,
+		"threadify.tags":       true,
 	}
 
 	for _, attr := range span.Attributes() {
@@ -121,7 +127,7 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 			if hasPrefix(key, "threadify.ref.") {
 				refKey = key[len("threadify.ref."):]
 			}
-			if refKey != "threadify.external_ref" {
+			if refKey != "threadify.thread_key" {
 				refs[refKey] = attrValueToString(attr.Value)
 			}
 		} else if hasPrefix(key, "threadify.context.") {
@@ -177,50 +183,48 @@ func (e *SpanExporter) processSpan(ctx context.Context, span sdktrace.ReadOnlySp
 		return resultErr
 	}
 	parentSpanID := span.Parent().SpanID()
-	if (!parentSpanID.IsValid() && externalRef == "") || (externalRef != "" && attrBool(span.Attributes(), "threadify.run.complete")) {
-		if targetStatus == "success" {
-			_, _ = thread.Complete(ctx, "Root span completed successfully")
-		} else {
-			_, _ = thread.Cancel(ctx, message)
+	if thread.ContractName == "" && thread.ContractID == "" && attrString(mergedSpanAttributes(span), "threadify.thread_id") == "" &&
+		((!parentSpanID.IsValid() && threadKey == "") || (threadKey != "" && attrBool(span.Attributes(), "threadify.run.complete"))) {
+		completions[thread.ThreadID] = func() error {
+			if targetStatus == "success" {
+				_, resultErr = thread.Complete(ctx, "Root span completed successfully")
+			} else {
+				_, resultErr = thread.Cancel(ctx, message)
+			}
+			if resultErr == nil {
+				e.mu.Lock()
+				delete(e.traceThreadMap, span.SpanContext().TraceID().String())
+				e.mu.Unlock()
+			}
+			return resultErr
 		}
-		e.mu.Lock()
-		delete(e.traceThreadMap, span.SpanContext().TraceID().String())
-		e.mu.Unlock()
 	}
 
 	return resultErr
 }
 
-func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadOnlySpan) (*threadify.ThreadInstance, error) {
+func (e *SpanExporter) resolveThread(ctx context.Context, span sdktrace.ReadOnlySpan) (*threadify.ThreadInstance, error) {
 	e.startMu.Lock()
 	defer e.startMu.Unlock()
 	traceID := span.SpanContext().TraceID().String()
-	externalRef, err := e.externalRef(span)
+	threadKey, err := e.threadKey(span)
 	if err != nil {
 		return nil, err
 	}
-	if externalRef != "" {
+	if threadKey != "" {
 		attrs := mergedSpanAttributes(span)
 		label := attrString(attrs, "threadify.label")
 		if label == "" {
 			label = span.Name()
 		}
-		opts := []threadify.StartOption{threadify.WithRefs(map[string]any{"threadify.external_ref": externalRef, "otel_trace_id": traceID})}
-		if c := attrString(attrs, "threadify.contract"); c != "" {
-			opts = append(opts, threadify.WithContract(c))
+		opts := threadify.ThreadOptions{
+			Label: label, Contract: attrString(attrs, "threadify.contract"),
+			Role: attrString(attrs, "threadify.role"), ServiceName: attrString(attrs, "threadify.service"),
+			Refs: map[string]string{"otel_trace_id": traceID}, Tags: attrStringSlice(attrs, "threadify.tags"),
 		}
-		if role := attrString(attrs, "threadify.role"); role != "" {
-			opts = append(opts, threadify.WithRole(role))
-		}
-		if service := attrString(attrs, "threadify.service"); service != "" {
-			opts = append(opts, threadify.WithService(service))
-		}
-		if tags := attrStringSlice(attrs, "threadify.tags"); len(tags) > 0 {
-			opts = append(opts, threadify.WithTags(tags...))
-		}
-		thread, err := e.conn.Start(ctx, label, opts...)
+		thread, err := e.conn.Thread(ctx, threadKey, opts)
 		if err == nil {
-			e.rememberReference(traceID, externalRef)
+			e.rememberReference(traceID, threadKey)
 		}
 		return thread, err
 	}
@@ -268,11 +272,16 @@ func (e *SpanExporter) getOrStartThread(ctx context.Context, span sdktrace.ReadO
 		opts = append(opts, threadify.WithContract(contractName))
 	}
 
+	// Trace-only fallback intentionally uses startThread: the Engine maintains its
+	// trace-ID correlation namespace separately from application threadKey values.
 	thread, err = e.conn.Start(ctx, label, opts...)
 	if err != nil {
 		return nil, err
 	}
 
+	if thread.ThreadKey != "" {
+		e.rememberReference(traceID, thread.ThreadKey)
+	}
 	e.cacheThread(traceID, thread)
 	return thread, nil
 }
@@ -380,14 +389,14 @@ func (e *SpanExporter) shouldDrop(name string) bool {
 
 var _ sdktrace.SpanExporter = (*SpanExporter)(nil)
 
-// externalRef resolves caller-controlled identity without treating names as correlation.
-func (e *SpanExporter) externalRef(span sdktrace.ReadOnlySpan) (string, error) {
+// threadKey resolves caller-controlled identity without treating names as correlation.
+func (e *SpanExporter) threadKey(span sdktrace.ReadOnlySpan) (string, error) {
 	attrs := mergedSpanAttributes(span)
 	if attrString(attrs, "threadify.thread_id") != "" {
 		return "", nil
 	}
 	set := attribute.NewSet(attrs...)
-	keys := []string{"threadify.external_ref"}
+	keys := []string{"threadify.thread_key"}
 	if e.options.UseWorkflowRunID == nil || *e.options.UseWorkflowRunID {
 		keys = append(keys, "workflow.run_id")
 	}
@@ -405,6 +414,9 @@ func (e *SpanExporter) externalRef(span sdktrace.ReadOnlySpan) (string, error) {
 		}
 		if ref != "" {
 			return ref, nil
+		}
+		if key == "threadify.thread_key" {
+			return "", fmt.Errorf("threadKey must be a non-empty string")
 		}
 	}
 	e.mu.Lock()

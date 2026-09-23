@@ -43,13 +43,22 @@ func main() {
 	otel.SetTracerProvider(provider)
 	defer func() { _ = provider.Shutdown(ctx) }()
 
+	orderID := os.Getenv("ORDER_ID")
+	if orderID == "" {
+		log.Fatal("ORDER_ID must identify the delivery being processed")
+	}
+	threadKey := "delivery:" + orderID
+	// Initialize the contract once before collecting spans. Later requests only need the key.
+	if _, err := conn.Thread(ctx, threadKey, threadify.ThreadOptions{Label: "Deliver order", Contract: "delivery_contract"}); err != nil {
+		log.Fatal("initialize thread:", err)
+	}
 	tracer := otel.Tracer("delivery-service")
 
 	ctx, span := tracer.Start(ctx, "deliver_order",
 		trace.WithAttributes(
 			attribute.String("rider.id", "RIDER-456"),
-			attribute.String("threadify.contract", "delivery_contract"),
-			attribute.String("threadify.label", "Deliver Order #12345"),
+			attribute.String("threadify.thread_key", threadKey),
+			attribute.String("threadify.label", "Deliver order "+orderID),
 			attribute.Int("random.data", 42),
 		),
 	)

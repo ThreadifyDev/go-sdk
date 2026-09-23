@@ -2,6 +2,7 @@ package threadify
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -200,6 +201,8 @@ func (c *Connection) IsConnected() bool {
 	return c.isConnected
 }
 
+// Start creates a thread using the legacy creation API.
+// Deprecated: use Thread with a stable application threadKey to create or resume.
 func (c *Connection) Start(ctx context.Context, label string, args ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected. Call Connect() first")
@@ -258,6 +261,10 @@ func (c *Connection) Start(ctx context.Context, label string, args ...StartOptio
 	threadID := asString(resp[FieldThreadID])
 	thread := newThreadInstance(c, threadID, cfg.contractName, "", asString(resp[FieldAccessLevel]), mapStringValues(cfg.refs))
 	thread.Tags = cfg.tags
+	thread.ContractName = cfg.contractName
+	// Trace-only exporter resolutions may resume an existing contracted thread.
+	// Preserve the Engine's stored metadata even when no contract was supplied.
+	applyThreadMetadata(thread, resp)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Thread started", "threadID", threadID)
 	return thread, nil
@@ -363,6 +370,7 @@ func (c *Connection) Join(ctx context.Context, opts ...JoinOption) (*ThreadInsta
 	threadID := asString(resp[FieldThreadID])
 	threadRole := asString(resp[FieldRole])
 	thread := newThreadInstance(c, threadID, asString(resp[FieldContractID]), threadRole, asString(resp[FieldAccessLevel]), mapStringValues(asMap(resp[FieldRefs])))
+	applyThreadMetadata(thread, resp)
 	c.threads.Store(threadID, thread)
 	c.logger.Debug("Joined thread", "threadID", threadID, "role", threadRole)
 	return thread, nil
@@ -716,4 +724,45 @@ func sameElements(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// applyThreadMetadata overlays only fields actually supplied by the Engine.
+func applyThreadMetadata(thread *ThreadInstance, response map[string]any) {
+	raw, err := json.Marshal(response)
+	if err != nil {
+		return
+	}
+	var fields struct {
+		ThreadKey       *string           `json:"threadKey"`
+		Label           *string           `json:"label"`
+		ContractID      *string           `json:"contractId"`
+		ContractName    *string           `json:"contractName"`
+		ContractVersion *int              `json:"contractVersion"`
+		Refs            map[string]string `json:"refs"`
+		Tags            []string          `json:"tags"`
+	}
+	if json.Unmarshal(raw, &fields) != nil {
+		return
+	}
+	if fields.ThreadKey != nil {
+		thread.ThreadKey = *fields.ThreadKey
+	}
+	if fields.Label != nil {
+		thread.Label = *fields.Label
+	}
+	if fields.ContractID != nil {
+		thread.ContractID = *fields.ContractID
+	}
+	if fields.ContractName != nil {
+		thread.ContractName = *fields.ContractName
+	}
+	if fields.ContractVersion != nil {
+		thread.ContractVersion = *fields.ContractVersion
+	}
+	if fields.Refs != nil {
+		thread.Refs = fields.Refs
+	}
+	if fields.Tags != nil {
+		thread.Tags = fields.Tags
+	}
 }

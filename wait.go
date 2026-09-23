@@ -215,7 +215,7 @@ func (t *ThreadInstance) WaitFor(ctx context.Context, stepName string, opts *Wai
 		return nil, &RequestError{Code: CodeInvalidWaitResponse, Message: "Engine returned a different invocation", InvocationID: id}
 	}
 	grant := &PermissionGrant{WaitResult: *result, thread: t}
-	t.invocationGrants.Store(stepName, grant)
+	t.runtime().invocationGrants.Store(stepName, grant)
 	return grant, nil
 }
 func (t *ThreadInstance) WaitForValidation(ctx context.Context, stepName, stepID string, opts *WaitOptions) (*WaitResult, error) {
@@ -258,7 +258,7 @@ func (g *PermissionGrant) Cancel(ctx context.Context) (*WaitResult, error) {
 	if result.Decision != StatusCancelled || result.InvocationID != g.InvocationID {
 		return nil, &RequestError{Code: "THREADIFY_PERMISSION_DENIED", Message: "Engine did not cancel this invocation", Response: response}
 	}
-	g.thread.invocationGrants.CompareAndDelete(g.StepName, g)
+	g.thread.runtime().invocationGrants.CompareAndDelete(g.StepName, g)
 	return result, nil
 }
 

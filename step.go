@@ -181,7 +181,7 @@ func IsDuplicateError(err error) bool {
 
 func (s *ThreadStep) sendEvent(ctx context.Context) (map[string]any, error) {
 	if s.thread.ThreadID == "" {
-		return nil, fmt.Errorf("thread not started")
+		return nil, fmt.Errorf("thread has not been resolved")
 	}
 
 	var resp map[string]any
@@ -364,7 +364,7 @@ func (s *ThreadStep) prepareReport(status string, messageOrData ...any) error {
 		s.event[FieldSubSteps] = subStepMaps
 	}
 
-	if value, ok := s.thread.invocationGrants.LoadAndDelete(s.stepName); ok {
+	if value, ok := s.thread.runtime().invocationGrants.LoadAndDelete(s.stepName); ok {
 		grant := value.(*PermissionGrant)
 		if current := asString(s.event["invocationId"]); current != "" && current != grant.InvocationID {
 			return fmt.Errorf("invocation does not match the claimed step")

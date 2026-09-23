@@ -18,30 +18,30 @@ Use `threadify.Connect` to establish a connection. You can configure the connect
 package main
 
 import (
-	"context"
-	"log"
-	"github.com/ThreadifyDev/go-sdk"
+    "context"
+    "log"
+
+    threadify "github.com/ThreadifyDev/go-sdk"
 )
 
 func main() {
-	ctx := context.Background()
-conn, _ := threadify.Connect(ctx, "your-api-key")
-defer conn.Close()
+    ctx := context.Background()
+    conn, err := threadify.Connect(ctx, "your-api-key")
+    if err != nil { log.Fatal(err) }
+    defer conn.Close()
 
-	thread, err := conn.Start(ctx, "", threadify.WithContract("order_flow"))
+    // Use the application's order ID, stable across requests and workers.
+    thread, err := conn.Thread(ctx, "order:ORD-123", threadify.ThreadOptions{
+        Label: "Order processing",
+        Contract: "order_flow",
+        Refs: map[string]string{"customerId": "CUSTOMER-42"},
+    })
+    if err != nil { log.Fatal(err) }
 
-    if err != nil {
-        log.Fatal(err)
-    }
-
-	// Easy chaining!
-	err := thread.Step("payment_processed").
-		AddContext(map[string]any{"amount": 99.99}).
-		Success(ctx)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+    _, err = thread.Step("payment_processed").
+        AddContext(map[string]any{"amount": 99.99}).
+        Success(ctx)
+    if err != nil { log.Fatal(err) }
 }
 ```
 
@@ -56,25 +56,43 @@ conn, err := threadify.Connect(ctx, "your-api-key",
 )
 ```
 
-### 2. Start a New Thread
+### 2. Create or Resume by Thread Key
 
-Start a thread, optionally associating it with a contract.
+`Thread(ctx, threadKey, options...)` atomically creates or resumes a thread within
+the authenticated tenant. Choose a stable application identifier for the session,
+order, or process. The Engine owns the generated `ThreadID` and key mapping, so
+callers do not need to persist the ID or retain a handle across requests.
 
 ```go
-// Start a generic thread
-thread, err := conn.Start(ctx, "")
+// Initialization: options supply creation defaults.
+thread, err := conn.Thread(ctx, "session:SESSION-123", threadify.ThreadOptions{
+    Label: "Agent session",
+    Contract: "agent_contract",
+    Refs: map[string]string{"customerId": "CUSTOMER-42"},
+    Tags: []string{"agent"},
+})
+if err != nil { log.Fatal(err) }
 
-if err != nil {
-    log.Fatal(err)
-}
-
-// Start a thread for a specific contract
-thread, err := conn.Start(ctx, "Order Processing Label", threadify.WithContract("order_processing"))
-
-if err != nil {
-    log.Fatal(err)
-}
+// A later request or worker only needs the key.
+thread, err = conn.Thread(ctx, "session:SESSION-123")
+if err != nil { log.Fatal(err) }
+_, err = thread.Step("tool_call").AddContext(map[string]any{"tool": "search"}).Success(ctx)
 ```
+
+Existing threads return their stored contract and pinned version, label, refs, and
+tags. Omitting the contract on resume is expected. Repeating the same contract is
+allowed and keeps the pinned version; a conflicting contract returns an error.
+Creation options do not overwrite existing metadata; use `AddRefs` for reference
+updates. `ThreadInstance` exposes `ThreadKey`, `Label`, `ContractName`,
+`ContractVersion`, `ContractID`, `Refs`, and `Tags` from the response.
+
+An unknown key with no options creates a free-form thread. Initialize contracted
+sessions before workers or exporters report their first steps. Closed threads
+reject resolution and writes; keys stay bound to the original thread. A new
+process needs a new key. Keys are trimmed, non-empty UTF-8 strings limited to
+1024 bytes. Concurrent resolutions of the same key return the same Engine thread.
+
+`Start` remains deprecated for compatibility. New integrations should use `Thread`.
 
 ### 3. Join an Existing Thread
 
@@ -168,6 +186,19 @@ The SDK uses the Functional Option pattern for configuration.
 -   `WithConnectTimeout(time.Duration)`: Set the connection timeout.
 -   `WithMaxInFlight(int)`: Set the maximum number of concurrent requests.
 
+### Thread Options
+
+`ThreadOptions` contains optional creation defaults:
+
+- `Label string`: Display label; never used as identity.
+- `Contract string`: Contract name, resolved and pinned at creation.
+- `Refs map[string]string`: Initial searchable references.
+- `Tags []string`: Initial tags.
+- `ServiceName string`: Override the connection service.
+- `Role string`: Role used when creating a contract thread.
+
+Omit the entire options value when resuming with an existing key.
+
 ### Join Options
 
 -   `WithJoinThreadID(string)`: Join by Thread ID.
@@ -238,6 +269,33 @@ exporter := threadifyotel.NewSpanExporter(conn, threadifyotel.SpanExporterOption
 provider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
 otel.SetTracerProvider(provider)
 ```
+
+Set `threadify.thread_key` on spans (or resource attributes) to use the same
+application identity as `conn.Thread`. `workflow.run_id` is the fallback when
+`UseWorkflowRunID` is nil or true. Direct `threadify.thread_id` targeting takes
+precedence. `threadify.label`, `threadify.contract`, `threadify.role`,
+`threadify.service`, and `threadify.tags` supply creation defaults. Prefer
+initializing contracted sessions with `conn.Thread` before spans are exported;
+subsequent spans only need `threadify.thread_key`.
+
+```go
+ctx, span := otel.Tracer("agent").Start(ctx, "tool_call", trace.WithAttributes(
+    attribute.String("threadify.thread_key", sessionID),
+    attribute.String("threadify.ref.customerId", customerID),
+))
+// Perform the tool call, then finish this span.
+span.End()
+```
+
+This span example also imports `go.opentelemetry.io/otel/attribute` and
+`go.opentelemetry.io/otel/trace`. Keyed threads remain active across traces and
+requests. An explicit boolean `threadify.run.complete` closes a free-form keyed
+thread after every span in the export batch has been recorded. Contracts control
+their own completion. Without any application key or direct thread ID, the
+exporter uses trace-ID correlation and completes a free-form thread after its root
+span. This internal fallback retains the legacy creation operation to preserve the
+Engine's separate trace-ID namespace; it does not turn trace IDs into application
+keys. Resolution, reference, step, and completion errors are returned to the caller.
 
 **Filter patterns:**
 

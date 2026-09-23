@@ -50,8 +50,9 @@ func main() {
 	waitCtx, cancelWait := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelWait()
 
-	notif, err := thread.WaitFor(waitCtx, "payment_confirmed", &threadify.WaitOptions{
+	notif, err := thread.WaitForNotification(waitCtx, "payment_confirmed", &threadify.WaitOptions{
 		Statuses: []string{"success"},
+		Timeout:  5 * time.Minute,
 	})
 
 	if err != nil {

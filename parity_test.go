@@ -197,8 +197,8 @@ func TestParityDisconnectRejectsOrdinaryRequest(t *testing.T) {
 	conn, mt := newTestConnection(t)
 	defer conn.Close()
 	errs := make(chan error, 1)
-	go func() { _, err := conn.Start(context.Background(), "order"); errs <- err }()
-	nextParityRequest(t, mt, "startThread", 0)
+	go func() { _, err := conn.Thread(context.Background(), "order:123"); errs <- err }()
+	nextParityRequest(t, mt, "thread", 0)
 	_ = mt.Close()
 	select {
 	case err := <-errs:

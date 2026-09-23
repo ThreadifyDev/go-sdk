@@ -24,9 +24,15 @@ func run() error {
 		return err
 	}
 	defer func() { _ = conn.Close() }()
-	thread, err := conn.Join(ctx, threadify.WithJoinThreadID(os.Getenv("THREADIFY_THREAD_ID")), threadify.WithJoinRole("go"))
+	thread, err := conn.Thread(ctx, "parity:"+os.Getenv("THREADIFY_PARITY_ID"))
 	if err != nil {
 		return err
+	}
+	if thread.ThreadID != os.Getenv("THREADIFY_THREAD_ID") {
+		return fmt.Errorf("thread key resolved a different thread")
+	}
+	if thread.ContractName == "" || thread.ContractVersion < 1 {
+		return fmt.Errorf("resume lost pinned contract metadata")
 	}
 	_, err = thread.WaitFor(ctx, "charge", nil)
 	if err != nil {
