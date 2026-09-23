@@ -202,6 +202,7 @@ func (c *Connection) IsConnected() bool {
 }
 
 // Start creates a thread using the legacy creation API.
+//
 // Deprecated: use Thread with a stable application threadKey to create or resume.
 func (c *Connection) Start(ctx context.Context, label string, args ...StartOption) (*ThreadInstance, error) {
 	if !c.IsConnected() {
