@@ -332,6 +332,15 @@ if err != nil { return err }
 if len(threads) == 0 { return fmt.Errorf("order thread not found") }
 thread, err := conn.Join(ctx, threadify.WithJoinThreadID(threads[0].ID), threadify.WithJoinRole("processor"))
 if err != nil { return err }
+paths, err := thread.Next(ctx) // Unranked possible Contract paths.
+if err != nil { return err }
+_ = paths
+eligibility, err := thread.Can(ctx, threadify.DecisionCandidate{Action: "charge"})
+if err != nil { return err }
+if !eligibility.Allowed { return fmt.Errorf("charge is not eligible: %s", eligibility.Reason) }
+advice, err := thread.Should(ctx, threadify.DecisionCandidate{Action: "charge"})
+if err != nil { return err }
+_ = advice // Advice never grants execution.
 grant, err := thread.WaitFor(ctx, "charge", &threadify.WaitOptions{Timeout: 15 * time.Second})
 if err != nil { return err }
 // Execute the permitted business operation here, or grant.Cancel(ctx) to release it.
@@ -344,6 +353,9 @@ validation, err := thread.WaitForValidation(ctx, "charge", result.StepID, nil)
 
 `WaitFor` now asks the Engine for permission for one invocation. The previous
 notification helper is `WaitForNotification`; a notification is not permission.
+`Can`, `Should`, and `Next` are read-only GraphQL decisions. `Next` returns
+multiple possible paths without ranking them; `Should` advises on one candidate.
+Only `WaitFor` makes the atomic execution claim.
 Cancelling a grant closes that invocation; it does not restore consumed fresh
 prerequisites. A fresh-prerequisite contract needs a new successful predecessor
 before another grant. The grant's invocation ID and default idempotency key accompany the next report
