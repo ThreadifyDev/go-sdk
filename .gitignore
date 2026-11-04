@@ -20,3 +20,10 @@ coverage.out
 
 # Local runnable sample server
 sample_server_test.go
+
+# Example binaries built with `go build` inside an example directory
+/examples/*/*
+!/examples/*/*.go
+!/examples/*/*.md
+!/examples/*/go.mod
+!/examples/*/go.sum
