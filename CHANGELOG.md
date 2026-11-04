@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Deprecated
+
+* `ThreadStep.AddPrivateContext`: Threadify has no private context. It now behaves exactly like `AddContext` and no longer adds a duplicate `private_<key>` field.
+
 ## [0.3.0](https://github.com/ThreadifyDev/go-sdk/compare/v0.2.1...v0.3.0) (2026-07-18)
 
 ### Added

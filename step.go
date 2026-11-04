@@ -65,16 +65,12 @@ func (s *ThreadStep) AddContext(data map[string]any) *ThreadStep {
 	return s
 }
 
+// AddPrivateContext adds context exactly like AddContext.
+//
+// Deprecated: Threadify has no private context. Values are stored and visible
+// like any other context field. Use AddContext.
 func (s *ThreadStep) AddPrivateContext(data map[string]any) *ThreadStep {
-	if s.err != nil || data == nil {
-		return s
-	}
-	for k, v := range data {
-		str := fmt.Sprintf("%v", v)
-		s.context[k] = str
-		s.context["private_"+k] = str
-	}
-	return s
+	return s.AddContext(data)
 }
 
 func (s *ThreadStep) SubStep(name string, data map[string]any, status ...string) *ThreadStep {

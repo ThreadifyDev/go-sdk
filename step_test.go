@@ -420,8 +420,8 @@ func TestThreadStep_PrivateContext(t *testing.T) {
 	if stepCtx["cardNumber"] != "4111111111111111" {
 		t.Errorf("expected cardNumber in context")
 	}
-	if stepCtx["private_cardNumber"] != "4111111111111111" {
-		t.Errorf("expected private_cardNumber in context")
+	if _, ok := stepCtx["private_cardNumber"]; ok {
+		t.Errorf("deprecated AddPrivateContext must not add a private_ copy")
 	}
 }
 
